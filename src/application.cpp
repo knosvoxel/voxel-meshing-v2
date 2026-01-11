@@ -184,6 +184,9 @@ void Application::renderImGuiFrame()
         }
     }
     ImGui::Separator();
+    ImGui::Text("Voxel Count: %1u", scene.voxelCount);
+    ImGui::Text("Vertex Count: %1u (%1u faces)", scene.vertexCount, scene.vertexCount / 6);
+    ImGui::Separator();
     ImGui::DragFloat3("Position", (float*)&cam.Position, 0.01f);
     ImGui::DragFloat("Movement Speed", (float*)&cam.MovementSpeed, 0.01, 0.0f, 0.0f, "%.1f");
     ImGui::End();

@@ -37,14 +37,12 @@ struct VoxInstance {
 			// Move data
 			vbo = other.vbo;
 			vao = other.vao;
-			instanceSSBO = other.instanceSSBO;
 			indirectCommand = other.indirectCommand;
 			instanceDataBuffer = other.instanceDataBuffer;
 
 			// Leave the other object in a valid state
 			other.vbo = 0;
 			other.vao = 0;
-			other.instanceSSBO = 0;
 			other.indirectCommand = 0;
 			other.instanceDataBuffer = 0;
 		}
@@ -56,15 +54,15 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void prepareModelData(const ogt_vox_model* model, vec4 offset, ComputeShader& compute);
-	void calculateBufferSize(const ogt_vox_model* model, uint32& voxelCount, ComputeShader& compute);
-	void generateMesh(uint32& vertexCount, ComputeShader& compute, bool flatDispatch);
+	void prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute);
+	void calculateBufferSize(uint32& voxelCount, ComputeShader& compute);
+	void generateMesh(uint32& vertexCount, ComputeShader& compute);
 
 	void render();
 
 	void cleanup();
 
-	uint32 vbo, vao, instanceSSBO, remappedSSBO, 
+	uint32 vbo, vao, remappedSSBO, 
 		indirectCommand, instanceDataBuffer, 
 		vboSizeBuffer, 
 		roundedSizeX, roundedSizeY, roundedSizeZ, vboSize;

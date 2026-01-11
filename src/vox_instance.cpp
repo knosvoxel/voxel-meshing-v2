@@ -1,27 +1,19 @@
 #include "vox_instance.h"
 
-void VoxInstance::prepareModelData(const ogt_vox_model* model, vec4 offset, ComputeShader& compute)
+void VoxInstance::prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute)
 {
-    uint32 modelSizeX = model->size_x;
-    uint32 modelSizeY = model->size_y;
-    uint32 modelSizeZ = model->size_z;
-
     // round to closest multiple of 8
-    roundedSizeX = (modelSizeX + 7) / 8 * 8;
-    roundedSizeY = (modelSizeY + 7) / 8 * 8;
-    roundedSizeZ = (modelSizeZ + 7) / 8 * 8;
+    roundedSizeX = (modelSize.x + 7) / 8 * 8;
+    roundedSizeY = (modelSize.y + 7) / 8 * 8;
+    roundedSizeZ = (modelSize.z + 7) / 8 * 8;
 
-    const uint8* voxelData = model->voxel_data;
-
-    glCreateBuffers(1, &instanceSSBO);
     glCreateBuffers(1, &remappedSSBO);
 
-    glNamedBufferStorage(instanceSSBO, sizeof(uint8) * modelSizeX * modelSizeY * modelSizeZ, voxelData, GL_DYNAMIC_STORAGE_BIT);
     glNamedBufferStorage(remappedSSBO, sizeof(uint8) * roundedSizeX * roundedSizeY * roundedSizeZ, nullptr, GL_DYNAMIC_STORAGE_BIT);
     glClearNamedBufferData(remappedSSBO, GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr); // all values are initially 0. 0 = empty voxel
 
     InstanceData instanceData{};
-    instanceData.instanceSize = glm::vec4(modelSizeX, modelSizeY, modelSizeZ, 0);
+    instanceData.instanceSize = glm::vec4(modelSize, 0);
     instanceData.remappedSize = glm::vec4(roundedSizeX, roundedSizeY, roundedSizeZ, 0);
     instanceData.offset = offset;
 
@@ -29,7 +21,7 @@ void VoxInstance::prepareModelData(const ogt_vox_model* model, vec4 offset, Comp
 
     glNamedBufferStorage(instanceDataBuffer, sizeof(InstanceData), &instanceData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, instanceSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, modelSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, remappedSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, instanceDataBuffer);
 
@@ -40,7 +32,7 @@ void VoxInstance::prepareModelData(const ogt_vox_model* model, vec4 offset, Comp
     //glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
     // remap_to_8s
-    glDispatchCompute(modelSizeX, modelSizeY, modelSizeZ);
+    glDispatchCompute(modelSize.x, modelSize.y, modelSize.z);
 
     //glEndQuery(GL_TIME_ELAPSED);
 
@@ -57,11 +49,9 @@ void VoxInstance::prepareModelData(const ogt_vox_model* model, vec4 offset, Comp
     //glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
     //// dispatch time in us
     //dispatchDuration = elapsedGPU / 1000.0;
-
-    glDeleteBuffers(1, &instanceSSBO);
 }
 
-void VoxInstance::calculateBufferSize(const ogt_vox_model* model, uint32& voxelCount, ComputeShader& compute)
+void VoxInstance::calculateBufferSize(uint32& voxelCount, ComputeShader& compute)
 {
     glCreateBuffers(1, &vboSizeBuffer);
 
@@ -120,7 +110,7 @@ void VoxInstance::calculateBufferSize(const ogt_vox_model* model, uint32& voxelC
     glDeleteBuffers(1, &vboSizeBuffer);
 }
 
-void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute, bool flatDispatch)
+void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute)
 {
     DrawArraysIndirectCommand indirectData{};
     indirectData.count = 0;
@@ -161,13 +151,7 @@ void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute, bool
     //glGenQueries(1, &meshingQuery);
     //glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
-    // compute
-    if (flatDispatch) {
-        glDispatchCompute(roundedSizeX / 8, 1, roundedSizeZ / 8);
-    }
-    else {
-        glDispatchCompute(roundedSizeX / 8, roundedSizeY / 8, roundedSizeZ / 8);
-    }
+    glDispatchCompute(roundedSizeX / 8, 1, roundedSizeZ / 8);
 
     //glEndQuery(GL_TIME_ELAPSED);
 
