@@ -4,7 +4,7 @@ const uint32 WIDTH = 1600;
 const uint32 HEIGHT = 900;
 
 const char* WINDOW_NAME = "Voxel Meshing";
-const char* VOX_FILE_PATH = "../res/vox/castle.vox";
+const char* VOX_FILE_PATH = "../../res/castle.vox";
 
 const float NEAR = 0.1f;
 const float FAR = 10000.0f;
@@ -39,6 +39,8 @@ void Application::init()
     coordX = Line(vec3(0.0f, 0.0f, 0.0f), vec3(128.0f, 0.0f, 0.0f), vec3(1.0f, 0.0f, 0.0f));
     coordY = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 128.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
     coordZ = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, 128.0f), vec3(0.0f, 0.0f, 1.0f));
+
+    scene.load(VOX_FILE_PATH);
 }
 
 void Application::initWindow()
@@ -100,6 +102,10 @@ void Application::initOpenGL()
     //glEnable(GL_BLEND);
     //glDepthFunc(GL_ALWAYS);
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    if (enableWireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
 }
 
 void Application::initImgui()
@@ -141,6 +147,7 @@ void Application::mainLoop()
         coordY.render(mvp);
         coordZ.render(mvp);
 
+        scene.render(mvp, currentFrame);
 
         renderImGuiFrame();
 
@@ -201,6 +208,8 @@ void Application::processInput()
 
 void Application::cleanup()
 {
+    scene.cleanup();
+
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();

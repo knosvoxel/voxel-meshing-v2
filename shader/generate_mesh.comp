@@ -1,0 +1,330 @@
+#version 460 core
+
+struct InstanceData{
+    vec4 instance_size;
+    vec4 remapped_size;
+    vec4 instance_position_offset;
+};
+
+struct VoxelData{
+    uint four_voxels;
+};
+
+struct Vertex{
+    vec3 position;
+    uint packed_data; // Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
+};
+
+struct DrawArraysIndirectCommand{
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout (binding = 0, std430) readonly buffer ssbo {
+    VoxelData voxels[];
+};
+
+layout (binding = 1, std430) writeonly buffer final_vertices {
+    Vertex vertices[];
+};
+
+layout (binding = 2, std430) buffer indirect_buffer {
+    DrawArraysIndirectCommand indirect_command;
+};
+
+layout (binding = 3, std430) readonly buffer instance_data_buffer {
+    InstanceData instance_data;
+};
+
+const vec3 normal_directions[6] = vec3[6](
+    vec3(-1.0,  0.0,  0.0),  // 0
+    vec3( 1.0,  0.0,  0.0),  // 1
+    vec3( 0.0,  0.0, -1.0),  // 2
+    vec3( 0.0,  0.0,  1.0),  // 3
+    vec3( 0.0, -1.0,  0.0),  // 4
+    vec3( 0.0,  1.0,  0.0)   // 5
+);
+
+void main() {
+    vec3 voxel_pos = gl_GlobalInvocationID;
+    vec3 offset_size = instance_data.instance_size.xyz;
+    vec3 model_size = instance_data.remapped_size.xyz;
+    uint voxel_index = uint(voxel_pos.x + (voxel_pos.y * model_size.x) + (voxel_pos.z * model_size.x * model_size.y));
+
+    // retrieve color index from packed voxel data (4 voxels per uint) 
+    VoxelData voxel_data = voxels[voxel_index / 4];
+    uint shift = 8 * (voxel_index % 4);
+    uint col_idx = (voxel_data.four_voxels >> shift) & 255;
+
+    // voxel empty = pass
+    if(col_idx == 0) return;
+
+//    col_idx = correct_occupy_uint + 1 + gl_WorkGroupID.x % 2;
+//
+    // workgroup visualization debug
+    //    col_idx = (gl_WorkGroupID.x 
+    //                + gl_WorkGroupID.y * 3
+    //                + gl_WorkGroupID.z * 5) % 255 + 1;
+
+    // vox format coordinates to OpenGL coordinates
+    vec3 voxel_pos_flipped = vec3(voxel_pos.y, voxel_pos.z, voxel_pos.x);
+    voxel_pos_flipped += instance_data.instance_position_offset.yzx - vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
+
+    // calculate amount of vertices that are visible
+    uint vertices_to_add = 0;
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x
+    vec3 neigh_x0 = vec3(voxel_pos.x, voxel_pos.y - 1.0, voxel_pos.z);
+    bool add_x0 = (neigh_x0.y < 0.0);
+    if (!add_x0) {
+        uint x0_index = uint((neigh_x0.z * model_size.y * model_size.x) + (neigh_x0.y * model_size.x) + neigh_x0.x);
+        VoxelData neigh_x0_data = voxels[x0_index / 4];
+        uint neigh_shift = (8 * (x0_index % 4));
+        uint neigh_col = (neigh_x0_data.four_voxels >> neigh_shift) & 255;
+        add_x0 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_x1 = vec3(voxel_pos.x, voxel_pos.y + 1.0, voxel_pos.z);
+    bool add_x1 = (neigh_x1.y >= model_size.y);
+    if (!add_x1) {
+        uint x1_index = uint((neigh_x1.z * model_size.y * model_size.x) + (neigh_x1.y * model_size.x) + neigh_x1.x);
+        VoxelData neigh_x1_data = voxels[x1_index / 4];
+        uint neigh_shift = (8 * (x1_index % 4));
+        uint neigh_col = (neigh_x1_data.four_voxels >> neigh_shift) & 255;
+        add_x1 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_z0 = vec3(voxel_pos.x - 1.0, voxel_pos.y, voxel_pos.z);
+    bool add_z0 = (neigh_z0.x < 0.0);
+    if (!add_z0) {
+        uint z0_index = uint((neigh_z0.z * model_size.y * model_size.x) + (neigh_z0.y * model_size.x) + neigh_z0.x);
+        VoxelData neigh_z0_data = voxels[z0_index / 4];
+        uint neigh_shift = (8 * (z0_index % 4));
+        uint neigh_col = (neigh_z0_data.four_voxels >> neigh_shift) & 255;
+        add_z0 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_z1 = vec3(voxel_pos.x + 1.0, voxel_pos.y, voxel_pos.z);
+    bool add_z1 = (neigh_z1.x >= model_size.x);
+    if (!add_z1) {
+        uint z1_index = uint((neigh_z1.z * model_size.y * model_size.x) + (neigh_z1.y * model_size.x) + neigh_z1.x);
+        VoxelData neigh_z1_data = voxels[z1_index / 4];
+        uint neigh_shift = (8 * (z1_index % 4));
+        uint neigh_col = (neigh_z1_data.four_voxels >> neigh_shift) & 255;
+        add_z1 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_y0 = vec3(voxel_pos.x, voxel_pos.y, voxel_pos.z - 1.0);
+    bool add_y0 = (neigh_y0.z < 0.0);
+    if (!add_y0) {
+        uint y0_index = uint((neigh_y0.z * model_size.y * model_size.x) + (neigh_y0.y * model_size.x) + neigh_y0.x);
+        VoxelData neigh_y0_data = voxels[y0_index / 4];
+        uint neigh_shift = (8 * (y0_index % 4));
+        uint neigh_col = (neigh_y0_data.four_voxels >> neigh_shift) & 255;
+        add_y0 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_y1 = vec3(voxel_pos.x, voxel_pos.y, voxel_pos.z + 1.0);
+    bool add_y1 = (neigh_y1.z >= model_size.z);
+    if (!add_y1) {
+        uint y1_index = uint((neigh_y1.z * model_size.y * model_size.x) + (neigh_y1.y * model_size.x) + neigh_y1.x);
+        VoxelData neigh_y1_data = voxels[y1_index / 4];
+        uint neigh_shift = (8 * (y1_index % 4));
+        uint neigh_col = (neigh_y1_data.four_voxels >> neigh_shift) & 255;
+        add_y1 = (neigh_col == 0);
+    }
+
+    if (add_x0) vertices_to_add += 6;
+    if (add_x1) vertices_to_add += 6;
+    if (add_z0) vertices_to_add += 6;
+    if (add_z1) vertices_to_add += 6;
+    if (add_y0) vertices_to_add += 6;
+    if (add_y1) vertices_to_add += 6;
+
+    uint local_base_idx = atomicAdd(indirect_command.count, vertices_to_add);
+
+    // x -> z -> y
+    // add each face based on if there's a neighbouring voxel or not
+    if (add_x0){
+        uint normal_index = 0;
+        uint x0_packed_data = (col_idx & 255) | (normal_index << 8); // color index in last byte, normal index 2nd to last of uint
+
+        Vertex v1, v2, v3, v4, v5, v6;
+        v1.position = voxel_pos_flipped + vec3(0.0, 1.0, 1.0); 
+        v1.packed_data = x0_packed_data;
+        v2.position = voxel_pos_flipped;
+        v2.packed_data = x0_packed_data;
+        v3.position = voxel_pos_flipped + vec3(0.0, 1.0, 0.0);
+        v3.packed_data = x0_packed_data;
+
+        v4.position = voxel_pos_flipped;
+        v4.packed_data = x0_packed_data;
+        v5.position = voxel_pos_flipped + vec3(0.0, 1.0, 1.0); 
+        v5.packed_data = x0_packed_data;
+        v6.position = voxel_pos_flipped + vec3(0.0, 0.0, 1.0);
+        v6.packed_data = x0_packed_data;
+
+        vertices[local_base_idx] = v1;
+        vertices[local_base_idx + 1] = v2;
+        vertices[local_base_idx + 2] = v3;
+        vertices[local_base_idx + 3] = v4;
+        vertices[local_base_idx + 4] = v5;
+        vertices[local_base_idx + 5] = v6;
+
+        local_base_idx += 6;
+    }
+
+    if (add_x1){
+        uint normal_index = 1;
+        uint x1_packed_data = (col_idx & 255) | (normal_index << 8);
+
+        Vertex v7, v8, v9, v10, v11, v12;
+        v7.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+        v7.packed_data = x1_packed_data;
+        v8.position = voxel_pos_flipped + vec3(1.0, 1.0, 0.0);
+        v8.packed_data = x1_packed_data;
+        v9.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
+        v9.packed_data = x1_packed_data;
+
+        v10.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
+        v10.packed_data = x1_packed_data;
+        v11.position = voxel_pos_flipped + vec3(1.0, 0.0, 1.0);
+        v11.packed_data = x1_packed_data;
+        v12.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+        v12.packed_data = x1_packed_data;
+        
+        vertices[local_base_idx] = v7;
+        vertices[local_base_idx + 1] = v8;
+        vertices[local_base_idx + 2] = v9;
+        vertices[local_base_idx + 3] = v10;
+        vertices[local_base_idx + 4] = v11;
+        vertices[local_base_idx + 5] = v12;
+
+        local_base_idx += 6;
+    }
+
+    if (add_z0){
+        uint normal_index = 2;
+        uint x2_packed_data = (col_idx & 255) | (normal_index << 8);
+
+        Vertex v13, v14, v15, v16, v17, v18;
+        v13.position = voxel_pos_flipped + vec3(0.0, 0.0, 0.0);
+        v13.packed_data = x2_packed_data;
+        v14.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
+        v14.packed_data = x2_packed_data;
+        v15.position = voxel_pos_flipped + vec3(1.0, 1.0, 0.0);
+        v15.packed_data = x2_packed_data;
+
+        v16.position = voxel_pos_flipped + vec3(1.0, 1.0, 0.0);
+        v16.packed_data = x2_packed_data;
+        v17.position = voxel_pos_flipped + vec3(0.0, 1.0, 0.0);
+        v17.packed_data = x2_packed_data;
+        v18.position = voxel_pos_flipped + vec3(0.0, 0.0, 0.0);
+        v18.packed_data = x2_packed_data;
+
+        vertices[local_base_idx] = v13;
+        vertices[local_base_idx + 1] = v14;
+        vertices[local_base_idx + 2] = v15;
+        vertices[local_base_idx + 3] = v16;
+        vertices[local_base_idx + 4] = v17;
+        vertices[local_base_idx + 5] = v18;
+
+        local_base_idx += 6;
+    }
+
+    if (add_z1){
+        uint normal_index = 3;
+        uint x3_packed_data = (col_idx & 255) | (normal_index << 8);
+
+        Vertex v19, v20, v21, v22, v23, v24;
+        v19.position = voxel_pos_flipped + vec3(0.0, 0.0, 1.0);
+        v19.packed_data = x3_packed_data;
+        v20.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+        v20.packed_data = x3_packed_data;
+        v21.position = voxel_pos_flipped + vec3(1.0, 0.0, 1.0);
+        v21.packed_data = x3_packed_data;
+
+        v22.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+        v22.packed_data = x3_packed_data;
+        v23.position = voxel_pos_flipped + vec3(0.0, 0.0, 1.0);
+        v23.packed_data = x3_packed_data;
+        v24.position = voxel_pos_flipped + vec3(0.0, 1.0, 1.0);
+        v24.packed_data = x3_packed_data;
+
+        vertices[local_base_idx] = v19;
+        vertices[local_base_idx + 1] = v20;
+        vertices[local_base_idx + 2] = v21;
+        vertices[local_base_idx + 3] = v22;
+        vertices[local_base_idx + 4] = v23;
+        vertices[local_base_idx + 5] = v24;
+
+        local_base_idx += 6;
+    }
+    
+    if (add_y0){
+        uint normal_index = 4;
+        uint x4_packed_data = (col_idx & 255) | (normal_index << 8);
+
+        Vertex v25, v26, v27, v28, v29, v30;
+        v25.position = voxel_pos_flipped + vec3(0.0, 0.0, 0.0);
+        v25.packed_data = x4_packed_data;
+        v26.position = voxel_pos_flipped + vec3(1.0, 0.0, 1.0);
+        v26.packed_data = x4_packed_data;
+        v27.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
+        v27.packed_data = x4_packed_data;
+
+        v28.position = voxel_pos_flipped + vec3(1.0, 0.0, 1.0);
+        v28.packed_data = x4_packed_data;
+        v29.position = voxel_pos_flipped + vec3(0.0, 0.0, 0.0);
+        v29.packed_data = x4_packed_data;
+        v30.position = voxel_pos_flipped + vec3(0.0, 0.0, 1.0);
+        v30.packed_data = x4_packed_data;
+
+        vertices[local_base_idx] = v25;
+        vertices[local_base_idx + 1] = v26;
+        vertices[local_base_idx + 2] = v27;
+        vertices[local_base_idx + 3] = v28;
+        vertices[local_base_idx + 4] = v29;
+        vertices[local_base_idx + 5] = v30;
+
+        local_base_idx += 6;
+    }
+    
+    if (add_y1){
+        uint normal_index = 5;
+        uint x5_packed_data = (col_idx & 255) | (normal_index << 8);
+
+        Vertex v31, v32, v33, v34, v35, v36;
+        v31.position = voxel_pos_flipped + vec3(0.0, 1.0, 0.0);
+        v31.packed_data = x5_packed_data;
+        v32.position = voxel_pos_flipped + vec3(1.0, 1.0, 0.0);
+        v32.packed_data = x5_packed_data;
+        v33.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+        v33.packed_data = x5_packed_data;
+
+        v34.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+        v34.packed_data = x5_packed_data;
+        v35.position = voxel_pos_flipped + vec3(0.0, 1.0, 1.0);
+        v35.packed_data = x5_packed_data;
+        v36.position = voxel_pos_flipped + vec3(0.0, 1.0, 0.0);
+        v36.packed_data = x5_packed_data;
+
+        vertices[local_base_idx] = v31;
+        vertices[local_base_idx + 1] = v32;
+        vertices[local_base_idx + 2] = v33;
+        vertices[local_base_idx + 3] = v34;
+        vertices[local_base_idx + 4] = v35;
+        vertices[local_base_idx + 5] = v36;
+
+        local_base_idx += 6;
+    }
+}

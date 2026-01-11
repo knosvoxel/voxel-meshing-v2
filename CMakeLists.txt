@@ -12,8 +12,8 @@ set(SOURCES
 	"${SRC_DIR}/application.cpp"
 	"${SRC_DIR}/camera.cpp" 
 	"${SRC_DIR}/line.cpp" 
-	"${SRC_DIR}/instance.cpp" 
-	"${SRC_DIR}/scene.cpp"
+	"${SRC_DIR}/vox_instance.cpp" 
+	"${SRC_DIR}/vox_scene.cpp"
 )
 
 # Executable definition and properties

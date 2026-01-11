@@ -1,0 +1,71 @@
+#pragma once
+
+#include "ogt_wrapper.h"
+#include "compute.h"
+
+using namespace glm;
+
+typedef struct InstanceData {
+	vec4 instanceSize;
+	vec4 remappedSize;
+	vec4 offset;
+	uint32 voxelCount = 0;
+};
+
+typedef struct Vertex {
+	vec3 pos;
+	uint32 packedData; // Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
+};
+
+typedef struct DrawArraysIndirectCommand {
+	uint32 count;
+	uint32 instanceCount;
+	uint32 first;
+	uint32 baseInstance;
+};
+
+struct VoxInstance {
+	VoxInstance() {};
+	~VoxInstance() {};
+
+	VoxInstance& operator=(VoxInstance&& other) noexcept {
+		if (this != &other) {
+			// Clean up existing resources
+			if (vbo) glDeleteBuffers(1, &vbo);
+			if (vao) glDeleteVertexArrays(1, &vao);
+
+			// Move data
+			vbo = other.vbo;
+			vao = other.vao;
+			instanceSSBO = other.instanceSSBO;
+			indirectCommand = other.indirectCommand;
+			instanceDataBuffer = other.instanceDataBuffer;
+
+			// Leave the other object in a valid state
+			other.vbo = 0;
+			other.vao = 0;
+			other.instanceSSBO = 0;
+			other.indirectCommand = 0;
+			other.instanceDataBuffer = 0;
+		}
+		return *this;
+	}
+	VoxInstance(const VoxInstance&) = default;
+	VoxInstance& operator=(const VoxInstance&) = default;
+	VoxInstance(VoxInstance&& other) noexcept {
+		*this = std::move(other);
+	}
+
+	void prepareModelData(const ogt_vox_model* model, vec4 offset, ComputeShader& compute);
+	void calculateBufferSize(const ogt_vox_model* model, uint32& voxelCount, ComputeShader& compute);
+	void generateMesh(uint32& vertexCount, ComputeShader& compute, bool flatDispatch);
+
+	void render();
+
+	void cleanup();
+
+	uint32 vbo, vao, instanceSSBO, remappedSSBO, 
+		indirectCommand, instanceDataBuffer, 
+		vboSizeBuffer, 
+		roundedSizeX, roundedSizeY, roundedSizeZ, vboSize;
+};

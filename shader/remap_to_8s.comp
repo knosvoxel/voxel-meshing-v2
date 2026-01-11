@@ -1,0 +1,44 @@
+// remaps voxel indices of an instance to multiples of 8
+#version 460 core
+
+struct InstanceData{
+    vec4 instance_size;
+    vec4 remapped_size;
+    vec4 instance_position_offset;
+};
+
+struct VoxelData{
+    uint four_voxels;
+};
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout (binding = 0, std430) readonly buffer ssbo {
+    VoxelData voxels[];
+};
+
+layout (binding = 1, std430) buffer remapped_ssbo {
+    uint remapped_voxels[];
+};
+
+layout (binding = 2, std430) readonly buffer instance_data_buffer {
+    InstanceData instance_data;
+};
+
+void main() {
+    vec3 voxel_pos = gl_GlobalInvocationID;
+    vec3 model_size = instance_data.instance_size.xyz;
+    uint voxel_index = uint(voxel_pos.x + (voxel_pos.y * model_size.x) + (voxel_pos.z * model_size.x * model_size.y));
+
+    VoxelData voxel_data = voxels[voxel_index / 4];
+    uint shift = 8 * (voxel_index % 4);
+    uint col_idx = (voxel_data.four_voxels >> shift) & 255;
+
+    vec3 remap_size = instance_data.remapped_size.xyz;
+    uint new_index = uint(voxel_pos.x + (voxel_pos.y * remap_size.x) + (voxel_pos.z * remap_size.x * remap_size.y));
+
+    uint target_voxel_data = new_index / 4;
+    uint shift_new = 8 * (new_index % 4);
+
+    atomicOr(remapped_voxels[target_voxel_data], (col_idx << shift_new));
+}

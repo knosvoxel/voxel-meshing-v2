@@ -1,0 +1,122 @@
+#version 460 core
+
+struct InstanceData{
+    vec4 instance_size;
+    vec4 remapped_size;
+    vec4 instance_position_offset;
+    uint voxel_count;
+};
+
+struct VoxelData{
+    uint four_voxels;
+};
+
+struct DrawArraysIndirectCommand{
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout (binding = 0, std430) readonly buffer ssbo {
+    VoxelData voxels[];
+};
+
+layout (binding = 1, std430) writeonly buffer vbo_size_buffer {
+    uint vbo_size;
+};
+
+layout (binding = 2, std430) buffer instance_data_buffer {
+    InstanceData instance_data;
+};
+
+void main() {
+    vec3 voxel_pos = gl_GlobalInvocationID;
+    vec3 model_size = instance_data.remapped_size.xyz;
+    uint voxel_index = uint(voxel_pos.x + (voxel_pos.y * model_size.x) + (voxel_pos.z * model_size.x * model_size.y));
+
+    // retrieve color index from packed voxel data (4 voxels per uint) 
+    VoxelData voxel_data = voxels[voxel_index / 4];
+    uint shift = 8 * (voxel_index % 4);
+    uint col_idx = (voxel_data.four_voxels >> shift) & 255;
+
+    // voxel empty = pass
+    if(col_idx == 0) return;
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x
+    vec3 neigh_x0 = vec3(voxel_pos.x, voxel_pos.y - 1.0, voxel_pos.z);
+    bool add_x0 = (neigh_x0.y < 0.0);
+    if (!add_x0) {
+        uint x0_index = uint((neigh_x0.z * model_size.y * model_size.x) + (neigh_x0.y * model_size.x) + neigh_x0.x);
+        VoxelData neigh_x0_data = voxels[x0_index / 4];
+        uint neigh_shift = (8 * (x0_index % 4));
+        uint neigh_col = (neigh_x0_data.four_voxels >> neigh_shift) & 255;
+        add_x0 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_x1 = vec3(voxel_pos.x, voxel_pos.y + 1.0, voxel_pos.z);
+    bool add_x1 = (neigh_x1.y >= model_size.y);
+    if (!add_x1) {
+        uint x1_index = uint((neigh_x1.z * model_size.y * model_size.x) + (neigh_x1.y * model_size.x) + neigh_x1.x);
+        VoxelData neigh_x1_data = voxels[x1_index / 4];
+        uint neigh_shift = (8 * (x1_index % 4));
+        uint neigh_col = (neigh_x1_data.four_voxels >> neigh_shift) & 255;
+        add_x1 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_z0 = vec3(voxel_pos.x - 1.0, voxel_pos.y, voxel_pos.z);
+    bool add_z0 = (neigh_z0.x < 0.0);
+    if (!add_z0) {
+        uint z0_index = uint((neigh_z0.z * model_size.y * model_size.x) + (neigh_z0.y * model_size.x) + neigh_z0.x);
+        VoxelData neigh_z0_data = voxels[z0_index / 4];
+        uint neigh_shift = (8 * (z0_index % 4));
+        uint neigh_col = (neigh_z0_data.four_voxels >> neigh_shift) & 255;
+        add_z0 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_z1 = vec3(voxel_pos.x + 1.0, voxel_pos.y, voxel_pos.z);
+    bool add_z1 = (neigh_z1.x >= model_size.x);
+    if (!add_z1) {
+        uint z1_index = uint((neigh_z1.z * model_size.y * model_size.x) + (neigh_z1.y * model_size.x) + neigh_z1.x);
+        VoxelData neigh_z1_data = voxels[z1_index / 4];
+        uint neigh_shift = (8 * (z1_index % 4));
+        uint neigh_col = (neigh_z1_data.four_voxels >> neigh_shift) & 255;
+        add_z1 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_y0 = vec3(voxel_pos.x, voxel_pos.y, voxel_pos.z - 1.0);
+    bool add_y0 = (neigh_y0.z < 0.0);
+    if (!add_y0) {
+        uint y0_index = uint((neigh_y0.z * model_size.y * model_size.x) + (neigh_y0.y * model_size.x) + neigh_y0.x);
+        VoxelData neigh_y0_data = voxels[y0_index / 4];
+        uint neigh_shift = (8 * (y0_index % 4));
+        uint neigh_col = (neigh_y0_data.four_voxels >> neigh_shift) & 255;
+        add_y0 = (neigh_col == 0);
+    }
+
+    //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+    vec3 neigh_y1 = vec3(voxel_pos.x, voxel_pos.y, voxel_pos.z + 1.0);
+    bool add_y1 = (neigh_y1.z >= model_size.z);
+    if (!add_y1) {
+        uint y1_index = uint((neigh_y1.z * model_size.y * model_size.x) + (neigh_y1.y * model_size.x) + neigh_y1.x);
+        VoxelData neigh_y1_data = voxels[y1_index / 4];
+        uint neigh_shift = (8 * (y1_index % 4));
+        uint neigh_col = (neigh_y1_data.four_voxels >> neigh_shift) & 255;
+        add_y1 = (neigh_col == 0);
+    }
+
+    if (add_x0) atomicAdd(vbo_size, 6);
+    if (add_x1) atomicAdd(vbo_size, 6);
+    if (add_z0) atomicAdd(vbo_size, 6);
+    if (add_z1) atomicAdd(vbo_size, 6);
+    if (add_y0) atomicAdd(vbo_size, 6);
+    if (add_y1) atomicAdd(vbo_size, 6);
+
+    atomicAdd(instance_data.voxel_count, 1);
+}

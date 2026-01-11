@@ -16,14 +16,12 @@
 
 #include "camera.h"
 #include "line.h"
+#include "vox_scene.h"
 
 using namespace glm;
 
 class Application {
 public:
-	//Application();s
-	//~Application();
-
 	void run();
 
 	float lastX = 0.0f, lastY = 0.0f, deltaTime = 0.0f, lastFrame = 0.0f;
@@ -33,6 +31,8 @@ public:
 	bool firstMouse = true;
 
 	Camera cam;
+	VoxScene scene;
+
 private:
 	void init();
 	void initWindow();
