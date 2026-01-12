@@ -1,6 +1,6 @@
 #include "vox_instance.h"
 
-void VoxInstance::prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute)
+void VoxInstance::prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute, float64& dispatchDuration)
 {
     // round to closest multiple of 8
     roundedSizeX = (modelSize.x + 7) / 8 * 8;
@@ -27,31 +27,31 @@ void VoxInstance::prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSiz
 
     compute.use();
 
-    //uint32 meshingQuery;
-    //glGenQueries(1, &meshingQuery);
-    //glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
+    uint32 meshingQuery;
+    glGenQueries(1, &meshingQuery);
+    glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
     // remap_to_8s
     glDispatchCompute(modelSize.x, modelSize.y, modelSize.z);
 
-    //glEndQuery(GL_TIME_ELAPSED);
+    glEndQuery(GL_TIME_ELAPSED);
 
     glMemoryBarrier(
         GL_SHADER_STORAGE_BARRIER_BIT
     );
 
-    //int32 available = 0;
-    //while (!available) {
-    //    glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-    //}
+    int32 available = 0;
+    while (!available) {
+        glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
+    }
 
-    //GLuint64 elapsedGPU;
-    //glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
-    //// dispatch time in us
-    //dispatchDuration = elapsedGPU / 1000.0;
+    GLuint64 elapsedGPU;
+    glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
+    // dispatch time in us
+    dispatchDuration = elapsedGPU / 1000.0;
 }
 
-void VoxInstance::calculateBufferSize(uint32& voxelCount, ComputeShader& compute)
+void VoxInstance::calculateBufferSize(uint32& voxelCount, ComputeShader& compute, float64& dispatchDuration)
 {
     glCreateBuffers(1, &vboSizeBuffer);
 
@@ -64,28 +64,28 @@ void VoxInstance::calculateBufferSize(uint32& voxelCount, ComputeShader& compute
 
     compute.use();
 
-    //GLuint meshingQuery;
-    //glGenQueries(1, &meshingQuery);
-    //glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
+    GLuint meshingQuery;
+    glGenQueries(1, &meshingQuery);
+    glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
     glDispatchCompute(roundedSizeX / 8, roundedSizeY / 8, roundedSizeZ / 8);
 
-    //glEndQuery(GL_TIME_ELAPSED);
+    glEndQuery(GL_TIME_ELAPSED);
 
     // buffer_size_compute
     glMemoryBarrier(
         GL_SHADER_STORAGE_BARRIER_BIT
     );
 
-    //int32 available = 0;
-    //while (!available) {
-    //    glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-    //}
+    int32 available = 0;
+    while (!available) {
+        glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
+    }
 
-    //GLuint64 elapsedGPU;
-    //glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
-    //// dispatch time in us
-    //dispatchDuration = elapsedGPU / 1000;
+    GLuint64 elapsedGPU;
+    glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
+    // dispatch time in us
+    dispatchDuration = elapsedGPU / 1000.0;
 
     void* vboSizePtr = glMapNamedBufferRange(vboSizeBuffer, 0, sizeof(GLuint),
         GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
@@ -110,7 +110,7 @@ void VoxInstance::calculateBufferSize(uint32& voxelCount, ComputeShader& compute
     glDeleteBuffers(1, &vboSizeBuffer);
 }
 
-void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute)
+void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute, float64& dispatchDuration)
 {
     DrawArraysIndirectCommand indirectData{};
     indirectData.count = 0;
@@ -147,13 +147,13 @@ void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute)
 
     compute.use();
 
-    //GLuint meshingQuery;
-    //glGenQueries(1, &meshingQuery);
-    //glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
+    GLuint meshingQuery;
+    glGenQueries(1, &meshingQuery);
+    glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
     glDispatchCompute(roundedSizeX / 8, 1, roundedSizeZ / 8);
 
-    //glEndQuery(GL_TIME_ELAPSED);
+    glEndQuery(GL_TIME_ELAPSED);
 
     glMemoryBarrier(
         GL_SHADER_STORAGE_BARRIER_BIT |
@@ -169,15 +169,15 @@ void VoxInstance::generateMesh(uint32& vertexCount, ComputeShader& compute)
         glUnmapNamedBuffer(indirectCommand);
     }
 
-    //GLint available = 0;
-    //while (!available) {
-    //    glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-    //}
+    GLint available = 0;
+    while (!available) {
+        glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
+    }
 
-    //GLuint64 elapsedGPU;
-    //glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
-    //// dispatch time in us
-    //dispatchDuration = elapsedGPU / 1000;
+    GLuint64 elapsedGPU;
+    glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
+    // dispatch time in us
+    dispatchDuration = elapsedGPU / 1000;
 }
 
 void VoxInstance::render()

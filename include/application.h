@@ -17,6 +17,7 @@
 #include "camera.h"
 #include "line.h"
 #include "vox_scene.h"
+#include "timer.h"
 
 using namespace glm;
 

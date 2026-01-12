@@ -54,9 +54,9 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute);
-	void calculateBufferSize(uint32& voxelCount, ComputeShader& compute);
-	void generateMesh(uint32& vertexCount, ComputeShader& compute);
+	void prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute, float64 &dispatchDuration);
+	void calculateBufferSize(uint32& voxelCount, ComputeShader& compute, float64& dispatchDuration);
+	void generateMesh(uint32& vertexCount, ComputeShader& compute, float64& dispatchDuration);
 
 	void render();
 

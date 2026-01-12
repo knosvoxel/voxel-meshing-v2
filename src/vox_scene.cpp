@@ -65,6 +65,20 @@ void VoxScene::load(const char* path)
 
 	numInstances = voxScene->num_instances;
 
+	std::cout << numInstances << " instance(s)\n" << std::endl;
+
+	// DEBUG INFORMATION //
+	uint64_t totalSizeX = 0;
+	uint64_t totalSizeY = 0;
+	uint64_t totalSizeZ = 0;
+
+	float64 remapDurationTotal = 0.0;
+	float64 sizeCalculationTotal = 0.0;
+	float64 meshingDurationTotal = 0.0;
+	float64 meshingDurationMin = DBL_MAX;
+	float64 meshingDurationMax = 0.0;
+	////////////////////////
+
 	for (size_t i = 0; i < numInstances; i++)
 	{
 		const ogt_vox_instance* currInstance = &voxScene->instances[i];
@@ -76,13 +90,46 @@ void VoxScene::load(const char* path)
 		ivec3 rotatedModelSize;
 		uint32 rotatedModelBuffer = createRotatedModelBuffer(voxScene, i, applyRotationsCompute, rotatedModelSize);
 
+		float64 remapDuration = 0.0;
+		float64 bufferSizeCalcDuration = 0.0;
+		float64 meshGenerationDuration = 0.0;
+
 		instances.emplace_back();
-		instances.back().prepareModelData(rotatedModelBuffer, instanceOffset, rotatedModelSize, remapTo8sCompute);
-		instances.back().calculateBufferSize(voxelCount, bufferSizeCompute);
-		instances.back().generateMesh(vertexCount, meshingCompute);
+		instances.back().prepareModelData(rotatedModelBuffer, instanceOffset, rotatedModelSize, remapTo8sCompute, remapDuration);
+		instances.back().calculateBufferSize(voxelCount, bufferSizeCompute, bufferSizeCalcDuration);
+		instances.back().generateMesh(vertexCount, meshingCompute, meshGenerationDuration);
 
 		glDeleteBuffers(1, &rotatedModelBuffer);
+
+		totalSizeX += currModel->size_x;
+		totalSizeY += currModel->size_y;
+		totalSizeZ += currModel->size_z;
+
+		remapDurationTotal += remapDuration;
+		sizeCalculationTotal += bufferSizeCalcDuration;
+
+		meshingDurationTotal += meshGenerationDuration;
+		if (meshGenerationDuration < meshingDurationMin) meshingDurationMin = meshGenerationDuration;
+		if (meshGenerationDuration > meshingDurationMax) meshingDurationMax = meshGenerationDuration;
 	}
+
+	std::cout << "Average chunk size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
+
+	std::cout << "Remap duration: " << std::endl;
+	std::cout << " Total: " << remapDurationTotal << "us (" << remapDurationTotal / 1000.0 << "ms)" << std::endl;
+	std::cout << " Average: " << remapDurationTotal / numInstances << "us\n" << std::endl;
+
+	std::cout << "Size calculation duration: " << std::endl;
+	std::cout << " Total: " << sizeCalculationTotal << "us (" << sizeCalculationTotal / 1000.0 << "ms)" << std::endl;
+	std::cout << " Average: " << sizeCalculationTotal / numInstances << "us\n" << std::endl;
+
+	double mean = meshingDurationTotal / numInstances;
+	std::cout << "Meshing duration: " << std::endl;
+	std::cout << " Total: " << meshingDurationTotal << "us (" << meshingDurationTotal / 1000.0 << "ms)" << std::endl;
+	std::cout << " Average: " << mean << "us" << std::endl;
+
+	std::cout << " Min: " << (meshingDurationMin) << "us" << std::endl;
+	std::cout << " Max: " << (meshingDurationMax) << "us\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
 }

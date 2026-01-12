@@ -28,6 +28,9 @@ void Application::run()
 
 void Application::init()
 {
+    Timer timer;
+    timer.start();
+
     initWindow();
     initOpenGL();
     initImgui();
@@ -41,6 +44,9 @@ void Application::init()
     coordZ = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, 128.0f), vec3(0.0f, 0.0f, 1.0f));
 
     scene.load(VOX_FILE_PATH);
+
+    timer.stop();
+    std::cout << "init took " << timer.elapsedSeconds() << " s" << std::endl;
 }
 
 void Application::initWindow()

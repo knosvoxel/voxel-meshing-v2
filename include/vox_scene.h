@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
 
 #include <glm/gtc/matrix_transform.hpp>
 
