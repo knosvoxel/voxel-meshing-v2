@@ -44,17 +44,11 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
         GL_COMMAND_BARRIER_BIT
     );
 
-    // Read back vertex count
-    void* indirectCommandPtr = glMapNamedBuffer(indirectCommand, GL_READ_ONLY);
-    if (!indirectCommandPtr) {
-        std::cerr << "Failed fetching indirectCommandBuffer pointer" << std::endl;
-        exit(-1);
-    }
+    DrawArraysIndirectCommand commandData;
+    glGetNamedBufferSubData(indirectCommand, 0, sizeof(DrawArraysIndirectCommand), &commandData);
+    uint32 vertexCount = commandData.count;
 
-    DrawArraysIndirectCommand* commandData = (DrawArraysIndirectCommand*)indirectCommandPtr;
-    uint32 vertexCount = commandData->count;
     totalVertexCount += vertexCount;
-    glUnmapNamedBuffer(indirectCommand);
 
     int32 available = 0;
     while (!available) {
@@ -66,23 +60,32 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
     // dispatch time in us
     dispatchDuration = elapsedGPU / 1000;
 
-    glCreateBuffers(1, &vbo);
-    glNamedBufferStorage(vbo, sizeof(Vertex) * vertexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-    glCopyNamedBufferSubData(meshingSSBO, vbo, 0, 0, sizeof(Vertex) * vertexCount);
+    glDeleteQueries(1, &meshingQuery);
 
-    glCreateVertexArrays(1, &vao);
+    if (vertexCount > 0) {
+        glCreateBuffers(1, &vbo);
+        glNamedBufferStorage(vbo, sizeof(Vertex) * vertexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
+        glCopyNamedBufferSubData(meshingSSBO, vbo, 0, 0, sizeof(Vertex) * vertexCount);
 
-    // position attribute in the vertex shader
-    glEnableVertexArrayAttrib(vao, 0);
-    glVertexArrayAttribBinding(vao, 0, 0);
-    glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+        glCreateVertexArrays(1, &vao);
 
-    // packed normal & color index data
-    glEnableVertexArrayAttrib(vao, 1);
-    glVertexArrayAttribBinding(vao, 1, 0);
-    glVertexArrayAttribIFormat(vao, 1, 1, GL_UNSIGNED_INT, 3 * sizeof(GLfloat));
+        // position attribute in the vertex shader
+        glEnableVertexArrayAttrib(vao, 0);
+        glVertexArrayAttribBinding(vao, 0, 0);
+        glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
 
-    glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(Vertex));
+        // packed normal & color index data
+        glEnableVertexArrayAttrib(vao, 1);
+        glVertexArrayAttribBinding(vao, 1, 0);
+        glVertexArrayAttribIFormat(vao, 1, 1, GL_UNSIGNED_INT, 3 * sizeof(GLfloat));
+
+        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(Vertex));
+    }
+    else {
+        vao = 0;
+        vbo = 0;
+    }
+    
 }
 
 void VoxInstance::render()

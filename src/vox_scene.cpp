@@ -70,6 +70,7 @@ void VoxScene::load(const char* path)
 	glBindImageTexture(0, palette, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
 
 	numInstances = voxScene->num_instances;
+	instances.reserve(numInstances);
 
 	timer.stop();
 	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s" << std::endl;
@@ -123,8 +124,6 @@ void VoxScene::load(const char* path)
 		if (meshGenerationDuration < meshingDurationMin) meshingDurationMin = meshGenerationDuration;
 		if (meshGenerationDuration > meshingDurationMax) meshingDurationMax = meshGenerationDuration;
 	}
-    glDeleteBuffers(1, &meshingSSBO);
-
 	timer.stop();
 	std::cout << "Meshing Loop Duration total: " << timer.elapsedSeconds() << "s \n" << std::endl;
 
@@ -141,6 +140,7 @@ void VoxScene::load(const char* path)
 	std::cout << " Max: " << (meshingDurationMax) << "us\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
+
 	glDeleteBuffers(1, &meshingSSBO);
 
 	timer_total.stop();
@@ -252,6 +252,8 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 	glGetQueryObjectui64v(rotationQuery, GL_QUERY_RESULT, &elapsedGPU);
 	// dispatch time in us
 	dispatchDuration = elapsedGPU / 1000;
+
+	glDeleteQueries(1, &rotationQuery);
 
 	glDeleteBuffers(1, &instanceTempSSBO);
 	glDeleteBuffers(1, &rotationDataTempBuffer);

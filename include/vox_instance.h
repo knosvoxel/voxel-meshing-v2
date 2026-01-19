@@ -31,8 +31,7 @@ struct VoxInstance {
 	VoxInstance& operator=(VoxInstance&& other) noexcept {
 		if (this != &other) {
 			// Clean up existing resources
-			if (vbo) glDeleteBuffers(1, &vbo);
-			if (vao) glDeleteVertexArrays(1, &vao);
+			cleanup();
 
 			// Move data
 			vbo = other.vbo;
