@@ -12,5 +12,5 @@ void main()
     color_idx = packed_data & 255;
 	normal_idx = (packed_data >> 8) & 7; // loweset 3 bits as only values from 0 - 5 are used
 
-    gl_Position = mvp * vec4(aPos, 1.0);
+	gl_Position = mvp * vec4(aPos, 1.0);
 }

@@ -1,0 +1,441 @@
+#version 460 core
+
+struct InstanceData{
+    vec4 instance_size;
+    vec4 remapped_size;
+    vec4 instance_position_offset;
+};
+
+struct VoxelData{
+    uint four_voxels;
+};
+
+struct Vertex{
+    vec3 position;
+    uint packed_data; // Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
+};
+
+struct DrawArraysIndirectCommand{
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout (local_size_x = 8, local_size_y = 1, local_size_z = 8) in;
+
+layout (binding = 0, std430) readonly buffer ssbo {
+    VoxelData voxels[];
+};
+
+layout (binding = 1, std430) writeonly buffer final_vertices {
+    Vertex vertices[];
+};
+
+layout (binding = 2, std430) buffer indirect_buffer {
+    DrawArraysIndirectCommand indirect_command;
+};
+
+layout (binding = 3, std430) readonly buffer instance_data_buffer {
+    InstanceData instance_data;
+};
+
+const vec3 normal_directions[6] = vec3[6](
+    vec3(-1.0,  0.0,  0.0),  // 0
+    vec3( 1.0,  0.0,  0.0),  // 1
+    vec3( 0.0,  0.0, -1.0),  // 2
+    vec3( 0.0,  0.0,  1.0),  // 3
+    vec3( 0.0, -1.0,  0.0),  // 4
+    vec3( 0.0,  1.0,  0.0)   // 5
+);
+
+shared uint local_offset = 0;
+
+void create_face_y0(vec3 starting_pos, vec3 ending_pos, uint col_idx){
+    float face_length = ending_pos.x - starting_pos.x;
+
+    uint local_base_idx = atomicAdd(indirect_command.count, 6);
+  
+    uint normal_index = 4;
+    uint y0_packed_data = (col_idx & 255) | (normal_index << 8);
+
+    Vertex v0, v1, v2, v3, v4, v5;
+    v0.position = starting_pos + vec3(0.0, 0.0, 0.0);
+    v0.packed_data = y0_packed_data;
+    v1.position = starting_pos + vec3(1.0 + face_length, 0.0, 1.0);
+    v1.packed_data = y0_packed_data;
+    v2.position = starting_pos + vec3(1.0 + face_length, 0.0, 0.0);
+    v2.packed_data = y0_packed_data;
+
+    v3.position = starting_pos + vec3(1.0 + face_length, 0.0, 1.0);
+    v3.packed_data = y0_packed_data;
+    v4.position = starting_pos + vec3(0.0, 0.0, 0.0);
+    v4.packed_data = y0_packed_data;
+    v5.position = starting_pos + vec3(0.0, 0.0, 1.0);
+    v5.packed_data = y0_packed_data;
+
+    vertices[local_base_idx] = v0;
+    vertices[local_base_idx + 1] = v1;
+    vertices[local_base_idx + 2] = v2;
+    vertices[local_base_idx + 3] = v3;
+    vertices[local_base_idx + 4] = v4;
+    vertices[local_base_idx + 5] = v5;
+}
+
+void create_face_y1(vec3 starting_pos, vec3 ending_pos, uint col_idx){
+    float face_length = ending_pos.x - starting_pos.x;
+
+    uint local_base_idx = atomicAdd(indirect_command.count, 6);
+
+    uint normal_index = 5;
+    uint y1_packed_data = (col_idx & 255) | (normal_index << 8);
+
+    Vertex v0, v1, v2, v3, v4, v5;
+    v0.position = starting_pos + vec3(0.0, 1.0, 0.0);
+    v0.packed_data = y1_packed_data;
+    v1.position = starting_pos + vec3(1.0 + face_length, 1.0, 0.0);
+    v1.packed_data = y1_packed_data;
+    v2.position = starting_pos + vec3(1.0 + face_length, 1.0, 1.0);
+    v2.packed_data = y1_packed_data;
+
+    v3.position = starting_pos + vec3(1.0 + face_length, 1.0, 1.0);
+    v3.packed_data = y1_packed_data;
+    v4.position = starting_pos + vec3(0.0, 1.0, 1.0);
+    v4.packed_data = y1_packed_data;
+    v5.position = starting_pos + vec3(0.0, 1.0, 0.0);
+    v5.packed_data = y1_packed_data;
+
+    vertices[local_base_idx] = v0;
+    vertices[local_base_idx + 1] = v1;
+    vertices[local_base_idx + 2] = v2;
+    vertices[local_base_idx + 3] = v3;
+    vertices[local_base_idx + 4] = v4;
+    vertices[local_base_idx + 5] = v5;
+}
+
+// x -> z -> y
+void create_face_z0(vec3 starting_pos, vec3 ending_pos, uint col_idx){
+    float face_length = ending_pos.x - starting_pos.x;
+
+    uint local_base_idx = atomicAdd(indirect_command.count, 6);
+                        
+    uint normal_index = 2;
+    uint z0_packed_data = (col_idx & 255) | (normal_index << 8);
+
+    Vertex v0, v1, v2, v3, v4, v5;
+    v0.position = starting_pos;
+    v0.packed_data = z0_packed_data;
+    v1.position = starting_pos + vec3(1.0 + face_length, 0.0, 0.0);
+    v1.packed_data = z0_packed_data;
+    v2.position = starting_pos + vec3(1.0 + face_length, 1.0, 0.0);
+    v2.packed_data = z0_packed_data;
+
+    v3.position = starting_pos;
+    v3.packed_data = z0_packed_data;
+    v4.position = starting_pos + vec3(1.0 + face_length, 1.0, 0.0);
+    v4.packed_data = z0_packed_data;    
+    v5.position = starting_pos + vec3(0.0, 1.0, 0.0);
+    v5.packed_data = z0_packed_data;
+
+    vertices[local_base_idx] = v0;
+    vertices[local_base_idx + 1] = v1;
+    vertices[local_base_idx + 2] = v2;
+    vertices[local_base_idx + 3] = v3;
+    vertices[local_base_idx + 4] = v4;
+    vertices[local_base_idx + 5] = v5;
+}
+
+void create_face_z1(vec3 starting_pos, vec3 ending_pos, uint col_idx){
+    float face_length = ending_pos.x - starting_pos.x;
+
+    uint local_base_idx = atomicAdd(indirect_command.count, 6);
+
+    uint normal_index = 3;
+    uint z1_packed_data = (col_idx & 255) | (normal_index << 8);
+
+    Vertex v0, v1, v2, v3, v4, v5;
+    v0.position = starting_pos + vec3(0.0, 0.0, 1.0);
+    v0.packed_data = z1_packed_data;
+    v1.position = starting_pos + vec3(1.0 + face_length, 1.0, 1.0);
+    v1.packed_data = z1_packed_data;
+    v2.position = starting_pos + vec3(1.0 + face_length, 0.0, 1.0);
+    v2.packed_data = z1_packed_data;
+
+    v3.position = starting_pos + vec3(1.0 + face_length, 1.0, 1.0);
+    v3.packed_data = z1_packed_data;
+    v4.position = starting_pos + vec3(0.0, 0.0, 1.0);
+    v4.packed_data = z1_packed_data;    
+    v5.position = starting_pos + vec3(0.0, 1.0, 1.0);
+    v5.packed_data = z1_packed_data;
+
+    vertices[local_base_idx] = v0;
+    vertices[local_base_idx + 1] = v1;
+    vertices[local_base_idx + 2] = v2;
+    vertices[local_base_idx + 3] = v3;
+    vertices[local_base_idx + 4] = v4;
+    vertices[local_base_idx + 5] = v5;
+}
+
+bool pos_in_bounds(vec3 pos, vec3 model_size){
+    if (pos.x < 0 || pos.y < 0 || pos.z < 0 ||
+        pos.x >= int(model_size.x) || pos.y >= int(model_size.y) || pos.z >= int(model_size.z)) {
+        return false;
+    }
+    else{
+        return true;
+    }
+}
+
+uint get_col_idx(vec3 pos, vec3 model_size){
+    uint index = uint(pos.x + pos.y * uint(model_size.x) + pos.z * uint(model_size.x * model_size.y));
+    VoxelData data = voxels[index / 4];
+    return (data.four_voxels >> (8 * (index % 4))) & 255;
+}
+
+void main() {
+    vec2 voxel_pos_flat = gl_GlobalInvocationID.xz;
+    vec3 offset_size = instance_data.instance_size.xyz;
+    vec3 model_size = instance_data.remapped_size.xyz;
+    vec3 voxel_pos_flipped;
+
+    uint previous_col_idx = 0;
+
+    // starting positions
+    vec3 starting_pos_z0 = vec3(-1);
+    vec3 starting_pos_z1 = vec3(-1);
+    vec3 starting_pos_y0 = vec3(-1);
+    vec3 starting_pos_y1 = vec3(-1);
+
+    // model_size.y from MagicaVoxel / equals x axis in OpenGL
+    for (int i = 0; i < model_size.y; i++){
+        vec3 voxel_pos = vec3(voxel_pos_flat.x, i, voxel_pos_flat.y);
+
+        uint voxel_index = uint(voxel_pos.x + (voxel_pos.y * model_size.x) + (voxel_pos.z * model_size.x * model_size.y));
+
+        // retrieve color index from packed voxel data (4 voxels per uint) 
+        VoxelData voxel_data = voxels[voxel_index / 4];
+        uint shift = 8 * (voxel_index % 4);
+        uint col_idx = (voxel_data.four_voxels >> shift) & 255;
+
+        voxel_pos_flipped = vec3(voxel_pos.y, voxel_pos.z, voxel_pos.x);
+        voxel_pos_flipped += instance_data.instance_position_offset.yzx - vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
+
+        uint col_idx_y0 = 0;
+        uint col_idx_y1 = 0;
+        uint col_idx_z0 = 0;
+        uint col_idx_z1 = 0;
+
+        // gather neighbouring voxel colors
+        vec3 neigh_z0 = vec3(voxel_pos.x - 1.0, voxel_pos.y, voxel_pos.z);
+        bool z0_in_bounds = pos_in_bounds(neigh_z0, model_size);
+        if (z0_in_bounds) col_idx_z0 = get_col_idx(neigh_z0, model_size);
+
+        //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+        vec3 neigh_z1 = vec3(voxel_pos.x + 1.0, voxel_pos.y, voxel_pos.z);
+        bool z1_in_bounds = pos_in_bounds(neigh_z1, model_size);
+        if (z1_in_bounds) col_idx_z1 = get_col_idx(neigh_z1, model_size);
+
+        //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+        vec3 neigh_y0 = vec3(voxel_pos.x, voxel_pos.y, voxel_pos.z - 1.0);
+        bool y0_in_bounds = pos_in_bounds(neigh_y0, model_size);
+        if (y0_in_bounds) col_idx_y0 = get_col_idx(neigh_y0, model_size);
+
+        //correct order: (y, z, x) : x -> y / y -> z / z -> x 
+        vec3 neigh_y1 = vec3(voxel_pos.x, voxel_pos.y, voxel_pos.z + 1.0);
+        bool y1_in_bounds = pos_in_bounds(neigh_y1, model_size);
+        if (y1_in_bounds) col_idx_y1 = get_col_idx(neigh_y1, model_size);
+
+        // y0 start
+       if (col_idx != 0 && col_idx_y0 == 0) {
+            if (starting_pos_y0 == vec3(-1)) {
+                starting_pos_y0 = voxel_pos_flipped;
+            } 
+            else if (col_idx != previous_col_idx) {
+                // Color changed, flush current face
+                create_face_y0(starting_pos_y0, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_y0 = voxel_pos_flipped;
+            }
+        } 
+        else {
+            // Hit empty voxel, flush current face if needed
+            if (starting_pos_y0 != vec3(-1)) {
+                create_face_y0(starting_pos_y0, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_y0 = vec3(-1);
+            }
+        }
+
+        // At end of column, flush remaining face
+        if (i == model_size.y - 1 && starting_pos_y0 != vec3(-1)) {
+            create_face_y0(starting_pos_y0, voxel_pos_flipped, col_idx);
+            starting_pos_y0 = vec3(-1);
+        }
+        // y0 end
+
+        // y1 start
+        if (col_idx != 0 && col_idx_y1 == 0) {
+            if (starting_pos_y1 == vec3(-1)) {
+                starting_pos_y1 = voxel_pos_flipped;
+            } 
+            else if (col_idx != previous_col_idx) {
+                // Color changed, flush current face
+                create_face_y1(starting_pos_y1, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_y1 = voxel_pos_flipped;
+            }
+        } 
+        else {
+            // Hit empty voxel, flush current face if needed
+            if (starting_pos_y1 != vec3(-1)) {
+                create_face_y1(starting_pos_y1, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_y1 = vec3(-1);
+            }
+        }
+
+        // At end of column, flush remaining face
+        if (i == model_size.y - 1 && starting_pos_y1 != vec3(-1)) {
+            create_face_y1(starting_pos_y1, voxel_pos_flipped, col_idx);
+            starting_pos_y1 = vec3(-1);
+        }
+        // y1 end
+
+        // z0 start
+       if (col_idx != 0 && col_idx_z0 == 0) {
+            if (starting_pos_z0 == vec3(-1)) {
+                starting_pos_z0 = voxel_pos_flipped;
+            } 
+            else if (col_idx != previous_col_idx) {
+                // Color changed, flush current face
+                create_face_z0(starting_pos_z0, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_z0 = voxel_pos_flipped;
+            }
+        } 
+        else {
+            // Hit empty voxel, flush current face if needed
+            if (starting_pos_z0 != vec3(-1)) {
+                create_face_z0(starting_pos_z0, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_z0 = vec3(-1);
+            }
+        }
+
+        // At end of column, flush remaining face
+        if (i == model_size.y - 1 && starting_pos_z0 != vec3(-1)) {
+            create_face_z0(starting_pos_z0, voxel_pos_flipped, col_idx);
+            starting_pos_z0 = vec3(-1);
+        }
+        // z0 end
+
+        // z1 start
+       if (col_idx != 0 && col_idx_z1 == 0) {
+            if (starting_pos_z1 == vec3(-1)) {
+                starting_pos_z1 = voxel_pos_flipped;
+            } 
+            else if (col_idx != previous_col_idx) {
+                // Color changed, flush current face
+                create_face_z1(starting_pos_z1, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_z1 = voxel_pos_flipped;
+            }
+        } 
+        else {
+            // Hit empty voxel, flush current face if needed
+            if (starting_pos_z1 != vec3(-1)) {
+                create_face_z1(starting_pos_z1, voxel_pos_flipped - vec3(1.0, 0.0, 0.0), previous_col_idx);
+                starting_pos_z1 = vec3(-1);
+            }
+        }
+
+        // At end of column, flush remaining face
+        if (i == model_size.y - 1 && starting_pos_z1 != vec3(-1)) {
+            create_face_z1(starting_pos_z1, voxel_pos_flipped, col_idx);
+            starting_pos_z1 = vec3(-1);
+        }
+        // z1 end
+
+        if (col_idx == 0){
+            previous_col_idx = 0;
+            continue;
+        }
+
+        // x0
+        // previous idx not empty
+        if (previous_col_idx == 0)
+        {
+            uint local_base_idx = atomicAdd(indirect_command.count, 6);
+
+            // x -> z -> y
+            uint normal_index = 0;
+            uint x0_packed_data = (col_idx & 255) | (normal_index << 8); // color index in last byte, normal index 2nd to last of uint
+
+            Vertex v1, v2, v3, v4, v5, v6;
+            v1.position = voxel_pos_flipped + vec3(0.0, 1.0, 1.0); 
+            v1.packed_data = x0_packed_data;
+            v2.position = voxel_pos_flipped;
+            v2.packed_data = x0_packed_data;
+            v3.position = voxel_pos_flipped + vec3(0.0, 1.0, 0.0);
+            v3.packed_data = x0_packed_data;
+
+            v4.position = voxel_pos_flipped;
+            v4.packed_data = x0_packed_data;
+            v5.position = voxel_pos_flipped + vec3(0.0, 1.0, 1.0); 
+            v5.packed_data = x0_packed_data;
+            v6.position = voxel_pos_flipped + vec3(0.0, 0.0, 1.0);
+            v6.packed_data = x0_packed_data;
+
+            vertices[local_base_idx] = v1;
+            vertices[local_base_idx + 1] = v2;
+            vertices[local_base_idx + 2] = v3;
+            vertices[local_base_idx + 3] = v4;
+            vertices[local_base_idx + 4] = v5;
+            vertices[local_base_idx + 5] = v6;
+
+        }
+
+        uint next_col_idx = 0;
+
+        if (i < model_size.y - 1){
+            // next idx in row
+            uint next_idx = uint(voxel_pos.x + ((voxel_pos.y + 1) * model_size.x) + (voxel_pos.z * model_size.x * model_size.y));
+
+            // retrieve color index from packed voxel data (4 voxels per uint) 
+            VoxelData next_voxel_data = voxels[next_idx / 4];
+            uint next_shift = 8 * (next_idx % 4);
+            next_col_idx = (next_voxel_data.four_voxels >> next_shift) & 255;
+        }
+
+        // create face if next voxel is not empty
+        if (next_col_idx == 0){
+            uint local_base_idx = atomicAdd(indirect_command.count, 6);
+
+            // x1
+            // x -> z -> y
+            uint normal_index = 1;
+            uint x1_packed_data = (col_idx & 255) | (normal_index << 8);
+
+            Vertex v7, v8, v9, v10, v11, v12;
+            v7.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+            v7.packed_data = x1_packed_data;
+            v8.position = voxel_pos_flipped + vec3(1.0, 1.0, 0.0);
+            v8.packed_data = x1_packed_data;
+            v9.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
+            v9.packed_data = x1_packed_data;
+
+            v10.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
+            v10.packed_data = x1_packed_data;
+            v11.position = voxel_pos_flipped + vec3(1.0, 0.0, 1.0);
+            v11.packed_data = x1_packed_data;
+            v12.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
+            v12.packed_data = x1_packed_data;
+        
+            vertices[local_base_idx] = v7;
+            vertices[local_base_idx + 1] = v8;
+            vertices[local_base_idx + 2] = v9;
+            vertices[local_base_idx + 3] = v10;
+            vertices[local_base_idx + 4] = v11;
+            vertices[local_base_idx + 5] = v12;
+       }
+       
+
+       previous_col_idx = col_idx;
+
+    }
+
+}
+

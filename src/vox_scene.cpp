@@ -34,12 +34,17 @@ static mat4 ogt_transform_to_glm(const ogt_vox_scene* scene, const ogt_vox_insta
 
 void VoxScene::load(const char* path)
 {
+	Timer timer, timer_total;
+	timer.start();
+	timer_total.start();
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
 	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
 	remapTo8sCompute = ComputeShader("../../shader/remap_to_8s.comp");
 	bufferSizeCompute = ComputeShader("../../shader/calculate_buffer_size.comp");
-	meshingCompute = ComputeShader("../../shader/generate_mesh_slicing.comp");
+	meshingCompute = ComputeShader("../../shader/slicing_v2.comp");
+
+	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
 	if (!voxScene) 
@@ -47,6 +52,7 @@ void VoxScene::load(const char* path)
 		std::cerr << "Failed to load vox file at path: " << path << std::endl;
 		exit(-1);
 	}
+	std::cout << "Scene load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	ogt_vox_palette ogt_palette = voxScene->palette;
 
@@ -65,6 +71,13 @@ void VoxScene::load(const char* path)
 
 	numInstances = voxScene->num_instances;
 
+	uint32 meshingBuffer;
+	glCreateBuffers(1, &meshingBuffer);
+	glNamedBufferStorage(meshingBuffer, sizeof(Vertex) * 128 * 128 * 128 * 36, nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+	timer.stop();
+	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s" << std::endl;
+
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 
 	// DEBUG INFORMATION //
@@ -77,8 +90,10 @@ void VoxScene::load(const char* path)
 	float64 meshingDurationTotal = 0.0;
 	float64 meshingDurationMin = DBL_MAX;
 	float64 meshingDurationMax = 0.0;
-	////////////////////////
 
+	float64 rotationDurationTotal = 0.0;
+	////////////////////////
+	timer.start();
 	for (size_t i = 0; i < numInstances; i++)
 	{
 		const ogt_vox_instance* currInstance = &voxScene->instances[i];
@@ -90,15 +105,18 @@ void VoxScene::load(const char* path)
 		ivec3 rotatedModelSize;
 		uint32 rotatedModelBuffer = createRotatedModelBuffer(voxScene, i, applyRotationsCompute, rotatedModelSize);
 
+
 		float64 remapDuration = 0.0;
 		float64 bufferSizeCalcDuration = 0.0;
 		float64 meshGenerationDuration = 0.0;
+		
+
 
 		instances.emplace_back();
-		instances.back().prepareModelData(rotatedModelBuffer, instanceOffset, rotatedModelSize, remapTo8sCompute, remapDuration);
-		instances.back().calculateBufferSize(voxelCount, bufferSizeCompute, bufferSizeCalcDuration);
-		instances.back().generateMesh(vertexCount, meshingCompute, meshGenerationDuration);
-
+		//instances.back().prepareModelData(rotatedModelBuffer, instanceOffset, rotatedModelSize, remapTo8sCompute, remapDuration);
+		//instances.back().calculateBufferSize(voxelCount, bufferSizeCompute, bufferSizeCalcDuration);
+		//instances.back().generateMesh(vertexCount, meshingCompute, meshGenerationDuration);
+		instances.back().generateMesh2(vertexCount, meshingBuffer, meshingCompute, meshGenerationDuration);
 		glDeleteBuffers(1, &rotatedModelBuffer);
 
 		totalSizeX += currModel->size_x;
@@ -113,7 +131,12 @@ void VoxScene::load(const char* path)
 		if (meshGenerationDuration > meshingDurationMax) meshingDurationMax = meshGenerationDuration;
 	}
 
-	std::cout << "Average chunk size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
+	timer.stop();
+	std::cout << "Meshing Step Duration total: " << timer.elapsedSeconds() << "s \n" << std::endl;
+
+	std::cout << "Rotation duration total: " << rotationDurationTotal << " s\n" << std::endl;
+
+	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
 
 	std::cout << "Remap duration: " << std::endl;
 	std::cout << " Total: " << remapDurationTotal << "us (" << remapDurationTotal / 1000.0 << "ms)" << std::endl;
@@ -131,7 +154,12 @@ void VoxScene::load(const char* path)
 	std::cout << " Min: " << (meshingDurationMin) << "us" << std::endl;
 	std::cout << " Max: " << (meshingDurationMax) << "us\n" << std::endl;
 
+	glDeleteBuffers(1, &meshingBuffer);
 	ogt_vox_destroy_scene(voxScene);
+
+	timer_total.stop();
+
+	std::cout << "Scene creation total: " << timer_total.elapsedSeconds() << " s" << std::endl;
 }
 
 void VoxScene::render(mat4 mvp, float currentFrame)

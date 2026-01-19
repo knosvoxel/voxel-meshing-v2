@@ -8,7 +8,6 @@
       "buildRoot": "${projectDir}\\build\\${name}",
       "installRoot": "${projectDir}\\${name}",
       "cmakeCommandArgs": "",
-      "buildCommandArgs": "",
       "ctestCommandArgs": "",
       "cmakeExecutable": "C:/Program Files/CMake/bin/cmake.exe"
     },

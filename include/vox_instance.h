@@ -7,9 +7,10 @@ using namespace glm;
 
 typedef struct InstanceData {
 	vec4 instanceSize;
-	vec4 remappedSize;
+	//vec4 remappedSize;
 	vec4 offset;
 	uint32 voxelCount = 0;
+	uint32 bufferSize = 0;
 };
 
 typedef struct Vertex {
@@ -57,13 +58,14 @@ struct VoxInstance {
 	void prepareModelData(uint32 modelSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute, float64 &dispatchDuration);
 	void calculateBufferSize(uint32& voxelCount, ComputeShader& compute, float64& dispatchDuration);
 	void generateMesh(uint32& vertexCount, ComputeShader& compute, float64& dispatchDuration);
+	void generateMesh2(uint32& vertexCount, uint32 meshingSSBO, vec4 offset, ivec3 modelSize, ComputeShader& compute, float64& dispatchDuration);
 
 	void render();
 
 	void cleanup();
 
-	uint32 vbo, vao, remappedSSBO, 
-		indirectCommand, instanceDataBuffer, 
-		vboSizeBuffer, 
-		roundedSizeX, roundedSizeY, roundedSizeZ, vboSize;
+	uint32 vbo = 0, vao = 0, remappedSSBO = 0, 
+		indirectCommand = 0, instanceDataBuffer = 0,
+		vboSizeBuffer = 0,
+		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0, vboSize = 0;
 };

@@ -9,6 +9,8 @@
 
 #include "vox_instance.h"
 
+#include "timer.h"
+
 using namespace glm;
 
 typedef struct RotationData {
@@ -47,9 +49,9 @@ struct VoxScene {
 
 	std::vector<VoxInstance> instances;
 
-	uint32 palette, voxelCount, vertexCount, numInstances;
+	uint32 palette = 0, voxelCount = 0, vertexCount = 0, numInstances = 0;
 
-	float64 total_draw_call_duration;
+	float64 total_draw_call_duration = 0.0;
 
 	Shader shader;
 	ComputeShader remapTo8sCompute, applyRotationsCompute, bufferSizeCompute, meshingCompute;
