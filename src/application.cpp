@@ -9,7 +9,7 @@ const char* VOX_FILE_PATH = "../../res/castle.vox";
 const float NEAR = 0.1f;
 const float FAR = 10000.0f;
 
-const vec3 CAM_POS(60.0f, 35.0f, 60.0f);
+const vec3 CAM_POS(60.0f, 200.0f, 60.0f);
 const float YAW = 225.0f;
 const float PITCH = -20.0f;
 
@@ -39,14 +39,14 @@ void Application::init()
     lastX = static_cast<float>(sizeX) / 2.0f;
     lastY = static_cast<float>(sizeY) / 2.0f;
 
-    coordX = Line(vec3(0.0f, 0.0f, 0.0f), vec3(128.0f, 0.0f, 0.0f), vec3(1.0f, 0.0f, 0.0f));
-    coordY = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 128.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
-    coordZ = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, 128.0f), vec3(0.0f, 0.0f, 1.0f));
+    coordX = Line(vec3(0.0f, 0.0f, 0.0f), vec3(1000.0f, 0.0f, 0.0f), vec3(1.0f, 0.0f, 0.0f));
+    coordY = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 1000.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
+    coordZ = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, 1000.0f), vec3(0.0f, 0.0f, 1.0f));
 
     scene.load(VOX_FILE_PATH);
 
     timer.stop();
-    std::cout << "init took " << timer.elapsedSeconds() << " s" << std::endl;
+    std::cout << "init total: " << timer.elapsedSeconds() << " s" << std::endl;
 }
 
 void Application::initWindow()

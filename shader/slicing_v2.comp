@@ -1,9 +1,10 @@
 #version 460 core
 
 struct InstanceData{
-    vec4 instance_size;
-    vec4 remapped_size;
-    vec4 instance_position_offset;
+    vec3 instance_size;
+    uint _pad1;
+    vec3 instance_position_offset;
+    uint _pad2;
 };
 
 struct VoxelData{
@@ -195,8 +196,10 @@ uint get_col_idx(vec3 pos, vec3 model_size){
 void main() {
     vec2 voxel_pos_flat = gl_GlobalInvocationID.xz;
     vec3 offset_size = instance_data.instance_size.xyz;
-    vec3 model_size = instance_data.remapped_size.xyz;
+    vec3 model_size = instance_data.instance_size.xyz;
     vec3 voxel_pos_flipped;
+
+    if (voxel_pos_flat.x >= model_size.x || voxel_pos_flat.y >= model_size.z) return;
 
     uint previous_col_idx = 0;
 
@@ -418,7 +421,7 @@ void main() {
             v9.packed_data = x1_packed_data;
 
             v10.position = voxel_pos_flipped + vec3(1.0, 0.0, 0.0);
-            v10.packed_data = x1_packed_data;
+            v10.packed_data = x1_packed_data; 
             v11.position = voxel_pos_flipped + vec3(1.0, 0.0, 1.0);
             v11.packed_data = x1_packed_data;
             v12.position = voxel_pos_flipped + vec3(1.0, 1.0, 1.0);
@@ -436,6 +439,5 @@ void main() {
        previous_col_idx = col_idx;
 
     }
-
 }
 

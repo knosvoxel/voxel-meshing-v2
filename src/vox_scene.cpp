@@ -71,22 +71,22 @@ void VoxScene::load(const char* path)
 
 	numInstances = voxScene->num_instances;
 
-	uint32 meshingBuffer;
-	glCreateBuffers(1, &meshingBuffer);
-	glNamedBufferStorage(meshingBuffer, sizeof(Vertex) * 128 * 128 * 128 * 36, nullptr, GL_DYNAMIC_STORAGE_BIT);
-
 	timer.stop();
 	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
+
+	// create temporary worst case buffer
+	uint32 meshingSSBO;
+	glCreateBuffers(1, &meshingSSBO);
+	glNamedBufferStorage(meshingSSBO, 128 * 128 * 128 * sizeof(Vertex) * 36,
+		nullptr, GL_DYNAMIC_STORAGE_BIT);
 
 	// DEBUG INFORMATION //
 	uint64_t totalSizeX = 0;
 	uint64_t totalSizeY = 0;
 	uint64_t totalSizeZ = 0;
 
-	float64 remapDurationTotal = 0.0;
-	float64 sizeCalculationTotal = 0.0;
 	float64 meshingDurationTotal = 0.0;
 	float64 meshingDurationMin = DBL_MAX;
 	float64 meshingDurationMax = 0.0;
@@ -103,59 +103,45 @@ void VoxScene::load(const char* path)
 		vec4 instanceOffset = vec4(transform.m30, transform.m31, transform.m32, 0);
 
 		ivec3 rotatedModelSize;
-		uint32 rotatedModelBuffer = createRotatedModelBuffer(voxScene, i, applyRotationsCompute, rotatedModelSize);
+		float64 rotationDuration = 0.0;
 
+		uint32 rotatedModelBuffer = createRotatedModelBuffer(voxScene, i, applyRotationsCompute, rotatedModelSize, rotationDuration);
 
-		float64 remapDuration = 0.0;
-		float64 bufferSizeCalcDuration = 0.0;
+		rotationDurationTotal += rotationDuration;
+
 		float64 meshGenerationDuration = 0.0;
 		
-
-
 		instances.emplace_back();
-		//instances.back().prepareModelData(rotatedModelBuffer, instanceOffset, rotatedModelSize, remapTo8sCompute, remapDuration);
-		//instances.back().calculateBufferSize(voxelCount, bufferSizeCompute, bufferSizeCalcDuration);
-		//instances.back().generateMesh(vertexCount, meshingCompute, meshGenerationDuration);
-		instances.back().generateMesh2(vertexCount, meshingBuffer, meshingCompute, meshGenerationDuration);
+		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO, instanceOffset, rotatedModelSize, meshingCompute, meshGenerationDuration);
 		glDeleteBuffers(1, &rotatedModelBuffer);
 
 		totalSizeX += currModel->size_x;
 		totalSizeY += currModel->size_y;
 		totalSizeZ += currModel->size_z;
 
-		remapDurationTotal += remapDuration;
-		sizeCalculationTotal += bufferSizeCalcDuration;
-
 		meshingDurationTotal += meshGenerationDuration;
 		if (meshGenerationDuration < meshingDurationMin) meshingDurationMin = meshGenerationDuration;
 		if (meshGenerationDuration > meshingDurationMax) meshingDurationMax = meshGenerationDuration;
 	}
+    glDeleteBuffers(1, &meshingSSBO);
 
 	timer.stop();
-	std::cout << "Meshing Step Duration total: " << timer.elapsedSeconds() << "s \n" << std::endl;
+	std::cout << "Meshing Loop Duration total: " << timer.elapsedSeconds() << "s \n" << std::endl;
 
-	std::cout << "Rotation duration total: " << rotationDurationTotal << " s\n" << std::endl;
+	std::cout << "Rotation duration total: " << rotationDurationTotal / 1000.0 << "ms\n" << std::endl;
 
 	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
 
-	std::cout << "Remap duration: " << std::endl;
-	std::cout << " Total: " << remapDurationTotal << "us (" << remapDurationTotal / 1000.0 << "ms)" << std::endl;
-	std::cout << " Average: " << remapDurationTotal / numInstances << "us\n" << std::endl;
-
-	std::cout << "Size calculation duration: " << std::endl;
-	std::cout << " Total: " << sizeCalculationTotal << "us (" << sizeCalculationTotal / 1000.0 << "ms)" << std::endl;
-	std::cout << " Average: " << sizeCalculationTotal / numInstances << "us\n" << std::endl;
-
 	double mean = meshingDurationTotal / numInstances;
-	std::cout << "Meshing duration: " << std::endl;
+	std::cout << "Meshing Compute duration: " << std::endl;
 	std::cout << " Total: " << meshingDurationTotal << "us (" << meshingDurationTotal / 1000.0 << "ms)" << std::endl;
 	std::cout << " Average: " << mean << "us" << std::endl;
 
 	std::cout << " Min: " << (meshingDurationMin) << "us" << std::endl;
 	std::cout << " Max: " << (meshingDurationMax) << "us\n" << std::endl;
 
-	glDeleteBuffers(1, &meshingBuffer);
 	ogt_vox_destroy_scene(voxScene);
+	glDeleteBuffers(1, &meshingSSBO);
 
 	timer_total.stop();
 
@@ -186,7 +172,7 @@ void VoxScene::cleanup()
 	glDeleteTextures(1, &palette);
 }
 
-uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, ComputeShader& compute, ivec3& rotatedModelSize)
+uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, ComputeShader& compute, ivec3& rotatedModelSize, float64& dispatchDuration)
 {
 	const ogt_vox_instance& instance = scene->instances[instanceIdx];
 	const ogt_vox_model* model = scene->models[instance.model_index];
@@ -244,12 +230,28 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 
 	compute.use();
 
+	uint32 rotationQuery;
+	glGenQueries(1, &rotationQuery);
+	glBeginQuery(GL_TIME_ELAPSED, rotationQuery);
+
 	// apply_rotations_compute
 	glDispatchCompute(model->size_x, model->size_y, model->size_z);
+
+	glEndQuery(GL_TIME_ELAPSED);
 
 	glMemoryBarrier(
 		GL_SHADER_STORAGE_BARRIER_BIT
 	);
+
+	int32 available = 0;
+	while (!available) {
+		glGetQueryObjectiv(rotationQuery, GL_QUERY_RESULT_AVAILABLE, &available);
+	}
+
+	uint64 elapsedGPU;
+	glGetQueryObjectui64v(rotationQuery, GL_QUERY_RESULT, &elapsedGPU);
+	// dispatch time in us
+	dispatchDuration = elapsedGPU / 1000;
 
 	glDeleteBuffers(1, &instanceTempSSBO);
 	glDeleteBuffers(1, &rotationDataTempBuffer);
