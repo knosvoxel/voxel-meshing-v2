@@ -34,9 +34,9 @@ static mat4 ogt_transform_to_glm(const ogt_vox_scene* scene, const ogt_vox_insta
 
 void VoxScene::load(const char* path)
 {
-	Timer timer, timer_total;
+	Timer timer, timerTotal;
 	timer.start();
-	timer_total.start();
+	timerTotal.start();
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
 	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
@@ -76,11 +76,29 @@ void VoxScene::load(const char* path)
 	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
+	auto meshingSSBOStart = timerTotal.elapsedMilliseconds();
+
+	// buffer max size calculation based on which model is the biggest in the scene
+	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
+	int32 maxSize = 0;
+	for (size_t i = 0; i < voxScene->num_models; i++) {
+		const ogt_vox_model* currModel = voxScene->models[i];
+
+		int32 currX = (currModel->size_x + 1) >> 1;
+		int32 currY = (currModel->size_y + 1) >> 1;
+		int32 currZ = (currModel->size_z + 1) >> 1;
+
+		int32 currSize = currX * currY * currZ;
+
+		if (currSize > maxSize) maxSize = currSize;
+	}
+	auto meshingSSBOEnd = timerTotal.elapsedMilliseconds();
+	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms" << std::endl;
 
 	// create temporary worst case buffer
 	uint32 meshingSSBO;
 	glCreateBuffers(1, &meshingSSBO);
-	glNamedBufferStorage(meshingSSBO, 128 * 128 * 128 * sizeof(Vertex) * 36,
+	glNamedBufferStorage(meshingSSBO, maxSize * sizeof(Vertex) * 36,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 
 	// DEBUG INFORMATION //
@@ -143,9 +161,9 @@ void VoxScene::load(const char* path)
 
 	glDeleteBuffers(1, &meshingSSBO);
 
-	timer_total.stop();
+	timerTotal.stop();
 
-	std::cout << "Scene creation total: " << timer_total.elapsedSeconds() << " s" << std::endl;
+	std::cout << "Scene creation total: " << timerTotal.elapsedSeconds() << " s" << std::endl;
 }
 
 void VoxScene::render(mat4 mvp, float currentFrame)
