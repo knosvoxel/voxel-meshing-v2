@@ -85,8 +85,10 @@ void VoxScene::load(const char* path)
 		const ogt_vox_model* currModel = voxScene->models[i];
 
 		int32 currX = (currModel->size_x + 1) >> 1;
-		int32 currY = (currModel->size_y + 1) >> 1;
-		int32 currZ = (currModel->size_z + 1) >> 1;
+		int32 currY = currModel->size_y;
+		int32 currZ = currModel->size_z;
+
+		std::cout << currX << " " << currY << " " << currZ << std::endl;
 
 		int32 currSize = currX * currY * currZ;
 

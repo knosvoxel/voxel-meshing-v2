@@ -18,6 +18,8 @@ void mouseCallback(GLFWwindow* window, double xposIn, double yposIn);
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void GLAPIENTRY message_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
+void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id, GLenum severity,
+    GLsizei length, const char* message, const void* userParam);
 
 void Application::run()
 {
@@ -100,9 +102,10 @@ void Application::initOpenGL()
     glFrontFace(GL_CW);
 
     //glEnable(GL_MULTISAMPLE);
-    //glEnable(GL_DEBUG_OUTPUT);
-    //glDebugMessageCallback(message_callback, 0);
-
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glDebugMessageCallback(glDebugOutput, nullptr);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
     // overdraw debug visuals
     // also adjust the shader in compute_scene.cpp to use overdraw.frag for this to work correctly
     //glEnable(GL_BLEND);
@@ -296,4 +299,20 @@ void GLAPIENTRY message_callback(GLenum source, GLenum type, GLuint id, GLenum s
 {
     fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
         (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), type, severity, message);
+}
+
+void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id, GLenum severity,
+    GLsizei length, const char* message, const void* userParam) {
+    // Ignore non-significant error/warning codes
+    if (id == 131169 || id == 131185 || id == 131218 || id == 131204) return;
+
+    std::cout << "---------------" << std::endl;
+    std::cout << "Debug message (" << id << "): " << message << std::endl;
+
+    switch (severity) {
+    case GL_DEBUG_SEVERITY_HIGH:         std::cout << "Severity: high"; break;
+    case GL_DEBUG_SEVERITY_MEDIUM:       std::cout << "Severity: medium"; break;
+    case GL_DEBUG_SEVERITY_LOW:          std::cout << "Severity: low"; break;
+    case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
+    } std::cout << std::endl;
 }
