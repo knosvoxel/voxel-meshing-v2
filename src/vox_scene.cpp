@@ -40,8 +40,6 @@ void VoxScene::load(const char* path)
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
 	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
-	remapTo8sCompute = ComputeShader("../../shader/remap_to_8s.comp");
-	bufferSizeCompute = ComputeShader("../../shader/calculate_buffer_size.comp");
 	meshingCompute = ComputeShader("../../shader/slicing_v2.comp");
 
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
@@ -73,7 +71,7 @@ void VoxScene::load(const char* path)
 	instances.reserve(numInstances);
 
 	timer.stop();
-	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s" << std::endl;
+	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s\n" << std::endl;
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 	auto meshingSSBOStart = timerTotal.elapsedMilliseconds();
@@ -94,7 +92,7 @@ void VoxScene::load(const char* path)
 	}
 
 	auto meshingSSBOEnd = timerTotal.elapsedMilliseconds();
-	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms" << std::endl;
+	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms\n" << std::endl;
 
 	// create temporary worst case buffer
 	uint32 meshingSSBO;
@@ -107,17 +105,27 @@ void VoxScene::load(const char* path)
 	uint64_t totalSizeY = 0;
 	uint64_t totalSizeZ = 0;
 
+	float64 dispatchPreTotal = 0.0;
+	float64 dispatchPostTotal = 0.0;
 	float64 meshingDurationTotal = 0.0;
 	float64 meshingDurationMin = DBL_MAX;
 	float64 meshingDurationMax = 0.0;
 
+	float64 forPreGenerate = 0.0;
+	float64 forPostGenerate = 0.0;
+
+	float64 rotationComputeDurationTotal = 0.0;
 	float64 rotationDurationTotal = 0.0;
 	////////////////////////
 	timer.start();
 	for (size_t i = 0; i < numInstances; i++)
 	{
+		Timer local;
+		local.start();
 		const ogt_vox_instance* currInstance = &voxScene->instances[i];
 		const ogt_vox_model* currModel = voxScene->models[currInstance->model_index];
+
+		//voxelCount += count_solid_voxels_in_model(currModel);
 
 		ogt_vox_transform transform = ogt_vox_sample_instance_transform(currInstance, 0, voxScene);
 		vec4 instanceOffset = vec4(transform.m30, transform.m31, transform.m32, 0);
@@ -125,14 +133,23 @@ void VoxScene::load(const char* path)
 		ivec3 rotatedModelSize;
 		float64 rotationDuration = 0.0;
 
+		float64 rotPre = local.elapsedMilliseconds();
 		uint32 rotatedModelBuffer = createRotatedModelBuffer(voxScene, i, applyRotationsCompute, rotatedModelSize, rotationDuration);
-
-		rotationDurationTotal += rotationDuration;
+		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
+		rotationComputeDurationTotal += rotationDuration;
 
 		float64 meshGenerationDuration = 0.0;
+		float64 dispatchPre = 0.0;
+		float64 dispatchPost = 0.0;
 		
 		instances.emplace_back();
-		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO, instanceOffset, rotatedModelSize, meshingCompute, meshGenerationDuration);
+		local.stop();
+		forPreGenerate += local.elapsedMilliseconds();
+		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO, instanceOffset, rotatedModelSize, meshingCompute, meshGenerationDuration, dispatchPre, dispatchPost);
+		local.start();
+		dispatchPreTotal += dispatchPre;
+		dispatchPostTotal += dispatchPost;
+
 		glDeleteBuffers(1, &rotatedModelBuffer);
 
 		totalSizeX += currModel->size_x;
@@ -142,21 +159,33 @@ void VoxScene::load(const char* path)
 		meshingDurationTotal += meshGenerationDuration;
 		if (meshGenerationDuration < meshingDurationMin) meshingDurationMin = meshGenerationDuration;
 		if (meshGenerationDuration > meshingDurationMax) meshingDurationMax = meshGenerationDuration;
+		local.stop();
+		forPostGenerate += local.elapsedMilliseconds();
 	}
 	timer.stop();
-	std::cout << "Meshing Loop Duration total: " << timer.elapsedSeconds() << "s \n" << std::endl;
-
-	std::cout << "Rotation duration total: " << rotationDurationTotal / 1000.0 << "ms\n" << std::endl;
 
 	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
 
-	double mean = meshingDurationTotal / numInstances;
-	std::cout << "Meshing Compute duration: " << std::endl;
-	std::cout << " Total: " << meshingDurationTotal << "us (" << meshingDurationTotal / 1000.0 << "ms)" << std::endl;
-	std::cout << " Average: " << mean << "us" << std::endl;
+	std::cout << "Meshing Loop Duration total: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
 
-	std::cout << " Min: " << (meshingDurationMin) << "us" << std::endl;
-	std::cout << " Max: " << (meshingDurationMax) << "us\n" << std::endl;
+
+	std::cout << "For loop pre generateMesh: " << forPreGenerate << "ms" << std::endl;
+	std::cout << " Rotation duration total: " << rotationDurationTotal << "ms" << std::endl;
+	std::cout << " Rotation compute duration total: " << rotationComputeDurationTotal / 1000.0 << "ms" << std::endl;
+
+	std::cout << "---------- generateMesh -------" << std::endl;
+	std::cout << " generateMesh pre  dispatch duration total: " << dispatchPreTotal << "ms\n" << std::endl;
+
+	double mean = meshingDurationTotal / numInstances;
+	std::cout << " Meshing Compute duration: " << std::endl;
+	std::cout << "  Total: " << meshingDurationTotal << "us (" << meshingDurationTotal / 1000.0 << "ms)" << std::endl;
+	std::cout << "  Average: " << mean << "us" << std::endl;
+	std::cout << "  Min: " << (meshingDurationMin) << "us" << std::endl;
+	std::cout << "  Max: " << (meshingDurationMax) << "us\n" << std::endl;
+
+	std::cout << " generateMesh post dispatch duration total: " << dispatchPostTotal << "ms" << std::endl;
+	std::cout << "-------------------------------" << std::endl;
+	std::cout << "For loop post generateMesh: " << forPostGenerate << "ms\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
 

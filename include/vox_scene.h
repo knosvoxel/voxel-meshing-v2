@@ -18,6 +18,7 @@ typedef struct RotationData {
 	vec4 rotatedSize;
 	vec4 minBounds;
 	mat4 transform;
+	//uint32 voxelCount = 0;
 };
 
 struct VoxScene {
@@ -30,9 +31,7 @@ struct VoxScene {
 			instances = std::move(other.instances);
 			palette = other.palette;
 			shader = std::move(other.shader);
-			remapTo8sCompute = std::move(other.remapTo8sCompute);
 			applyRotationsCompute = std::move(other.applyRotationsCompute);
-			bufferSizeCompute = std::move(other.bufferSizeCompute);
 			meshingCompute = std::move(other.meshingCompute);
 
 			// Leave the other object in a valid state
@@ -54,5 +53,5 @@ struct VoxScene {
 	float64 total_draw_call_duration = 0.0;
 
 	Shader shader;
-	ComputeShader remapTo8sCompute, applyRotationsCompute, bufferSizeCompute, meshingCompute;
+	ComputeShader applyRotationsCompute, meshingCompute;
 };

@@ -1,7 +1,11 @@
 #include "vox_instance.h"
 
-void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& compute, float64& dispatchDuration)
+#include "timer.h"
+
+void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& compute, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost)
 {
+    Timer timer;
+    timer.start();
     DrawArraysIndirectCommand indirectData{};
     indirectData.count = 0;
     indirectData.instanceCount = 1;
@@ -30,11 +34,12 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
     glGenQueries(1, &meshingQuery);
     glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
-    roundedSizeX = (modelSize.x + 7) / 8 * 8;
-    roundedSizeY = (modelSize.y + 7) / 8 * 8;
-    roundedSizeZ = (modelSize.z + 7) / 8 * 8;
-
-    glDispatchCompute(roundedSizeX / 8, 1, roundedSizeZ / 8);
+    roundedSizeX = (modelSize.x + 15) / 16;
+    roundedSizeY = (modelSize.y + 15) / 16;
+    roundedSizeZ = (modelSize.z + 15) / 16;
+    timer.stop();
+    dispatchPre = timer.elapsedMilliseconds();
+    glDispatchCompute(roundedSizeX, 1, roundedSizeZ);
 
     glEndQuery(GL_TIME_ELAPSED);
 
@@ -43,7 +48,7 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
         GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
         GL_COMMAND_BARRIER_BIT
     );
-
+    timer.start();
     DrawArraysIndirectCommand commandData;
     glGetNamedBufferSubData(indirectCommand, 0, sizeof(DrawArraysIndirectCommand), &commandData);
     uint32 vertexCount = commandData.count;
@@ -85,7 +90,8 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
         vao = 0;
         vbo = 0;
     }
-    
+    timer.stop();
+    dispatchPost = timer.elapsedMilliseconds();
 }
 
 void VoxInstance::render()
