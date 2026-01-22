@@ -45,7 +45,7 @@ struct VoxScene {
 	void render(mat4 mvp, float currentFrame);
 	void cleanup();
 
-	uint32 createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, ComputeShader& compute, ivec3& rotatedModelSize, float64& dispatchDuration);
+	uint32 createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, ComputeShader& compute, ivec3& rotatedSize, float64& dispatchDuration);
 
 	std::vector<VoxInstance> instances;
 

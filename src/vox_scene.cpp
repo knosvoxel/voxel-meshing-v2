@@ -78,7 +78,7 @@ void VoxScene::load(const char* path)
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 	auto meshingSSBOStart = timerTotal.elapsedMilliseconds();
 
-	// buffer max size calculation based on which model is the biggest in the scene
+	// staging buffer size calculation based on which model is the biggest in the scene
 	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
 	int32 maxSize = 0;
 	for (size_t i = 0; i < voxScene->num_models; i++) {
@@ -88,12 +88,11 @@ void VoxScene::load(const char* path)
 		int32 currY = currModel->size_y;
 		int32 currZ = currModel->size_z;
 
-		std::cout << currX << " " << currY << " " << currZ << std::endl;
-
 		int32 currSize = currX * currY * currZ;
 
 		if (currSize > maxSize) maxSize = currSize;
 	}
+
 	auto meshingSSBOEnd = timerTotal.elapsedMilliseconds();
 	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms" << std::endl;
 
@@ -254,8 +253,11 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 	glGenQueries(1, &rotationQuery);
 	glBeginQuery(GL_TIME_ELAPSED, rotationQuery);
 
+	uint32 dispatchSizeX = (model->size_x + 15) / 16;
+	uint32 dispatchSizeY = (model->size_y + 15) / 16;
+
 	// apply_rotations_compute
-	glDispatchCompute(model->size_x, model->size_y, model->size_z);
+	glDispatchCompute(dispatchSizeX, dispatchSizeY, model->size_z);
 
 	glEndQuery(GL_TIME_ELAPSED);
 
