@@ -37,7 +37,7 @@ layout (binding = 2, std430) buffer indirect_buffer {
     DrawArraysIndirectCommand indirect_command;
 };
 
-layout (binding = 3, std430) readonly buffer instance_data_buffer {
+layout (binding = 3, std140) uniform instance_data_buffer {
     InstanceData instance_data;
 };
 

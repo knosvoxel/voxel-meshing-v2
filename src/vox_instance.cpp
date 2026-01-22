@@ -12,21 +12,24 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
     indirectData.first = 0;
     indirectData.baseInstance = 0;
 
-    InstanceData instanceData{};
-    instanceData.instanceDimensions = modelSize;
-    instanceData.offset = offset;
+    
 
     glCreateBuffers(1, &indirectCommand);
-    glCreateBuffers(1, &instanceDataBuffer);
 
     glNamedBufferStorage(indirectCommand, sizeof(DrawArraysIndirectCommand), &indirectData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
-    glNamedBufferStorage(instanceDataBuffer, sizeof(InstanceData), &instanceData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
 
     //compute shader call
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, modelSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, meshingSSBO); // temp buffer
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, indirectCommand);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, instanceDataBuffer);
+
+    InstanceData instanceData{};
+    instanceData.instanceDimensions = modelSize;
+    instanceData.offset = offset;
+
+    glCreateBuffers(1, &instanceDataBuffer);
+    glNamedBufferStorage(instanceDataBuffer, sizeof(InstanceData), &instanceData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 3, instanceDataBuffer);
 
     compute.use();
 
@@ -60,7 +63,7 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
         glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
     }
 
-    uint64 elapsedGPU;
+    uint64 elapsedGPU = 0;
     glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
     // dispatch time in us
     dispatchDuration = elapsedGPU / 1000;

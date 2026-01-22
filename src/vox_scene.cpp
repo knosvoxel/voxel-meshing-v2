@@ -141,6 +141,7 @@ void VoxScene::load(const char* path)
 		float64 meshGenerationDuration = 0.0;
 		float64 dispatchPre = 0.0;
 		float64 dispatchPost = 0.0;
+		float64 copyDuration = 0.0;
 		
 		instances.emplace_back();
 		local.stop();
@@ -261,20 +262,21 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 	glNamedBufferStorage(rotatedModelSSBO, sizeof(uint8_t) * model->size_x * model->size_y * model->size_z, nullptr, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
 	glClearNamedBufferData(rotatedModelSSBO, GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr); // all values are initially 0. 0 = empty voxel
 
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, instanceTempSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, rotatedModelSSBO);
+
 	RotationData rotationData{};
 	rotationData.instanceSize = vec4(model->size_x, model->size_y, model->size_z, 1.0);
 	rotationData.rotatedSize = vec4(rotatedModelSize, 1.0);
 	rotationData.minBounds = vec4(minBounds, 1.0);
 	rotationData.transform = transformMat;
 
-	uint32 rotationDataTempBuffer;
-	glCreateBuffers(1, &rotationDataTempBuffer);
+	uint32 rotationDataUBO;
+	glCreateBuffers(1, &rotationDataUBO);
 
-	glNamedBufferStorage(rotationDataTempBuffer, sizeof(RotationData), &rotationData, GL_DYNAMIC_STORAGE_BIT);
+	glNamedBufferStorage(rotationDataUBO, sizeof(RotationData), &rotationData, GL_DYNAMIC_STORAGE_BIT);
 
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, instanceTempSSBO);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, rotatedModelSSBO);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, rotationDataTempBuffer);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 2, rotationDataUBO);
 
 	compute.use();
 
@@ -307,7 +309,7 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 	glDeleteQueries(1, &rotationQuery);
 
 	glDeleteBuffers(1, &instanceTempSSBO);
-	glDeleteBuffers(1, &rotationDataTempBuffer);
+	glDeleteBuffers(1, &rotationDataUBO);
 
 	return rotatedModelSSBO;
 }

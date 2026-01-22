@@ -22,7 +22,7 @@ layout (binding = 1, std430) buffer rotated_ssbo {
     uint rotated_voxels[];
 };
 
-layout (binding = 2, std430) readonly buffer rotation_data_buffer {
+layout (binding = 2, std140) uniform rotation_data_buffer {
     RotationData rotation_data;
 };
 
