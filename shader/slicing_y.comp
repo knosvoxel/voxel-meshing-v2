@@ -25,46 +25,27 @@ struct DrawArraysIndirectCommand{
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (binding = 0, std430) readonly buffer ssbo { VoxelData voxels[]; };
-layout (binding = 1, std430) writeonly buffer final_vertices { Vertex vertices[]; };
-layout (binding = 2, std430) buffer indirect_buffer { DrawArraysIndirectCommand indirect_command; };
+layout (binding = 0, std430) readonly restrict buffer ssbo { VoxelData voxels[]; };
+layout (binding = 1, std430) writeonly restrict buffer final_vertices { Vertex vertices[]; };
+layout (binding = 2, std430) restrict buffer indirect_buffer { DrawArraysIndirectCommand indirect_command; };
 layout (binding = 3, std140) uniform instance_data_buffer { InstanceData instance_data; };
 
 uint get_voxel(uint x, uint y, uint z, vec3 size) {
-    if (x >= size.x || y >= size.y || z >= size.z) return 0;
-    uint idx = uint(x + y * size.x + z * size.x * size.y);
-    return (voxels[idx / 4].four_voxels >> (8 * (idx % 4))) & 255;
-}
-
-vec3 get_pos_flipped(uint x, uint y, uint z, vec3 offset_size) {
-    vec3 p = vec3(y, z, x);
-    p += instance_data.instance_position_offset.yzx - 
-         vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
-    return p;
+    uint idx = x + (y * uint(size.x)) + (z * uint(size.x) * uint(size.y));
+    return (voxels[idx >> 2].four_voxels >> (8 * (idx & 3))) & 255;
 }
 
 void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
-    // We swept Input Y, which is Output X. Face length is diff in X.
     float face_length = end.x - start.x; 
+    
     uint base_idx = atomicAdd(indirect_command.count, 6);
     uint packed_val = (col & 255) | (normal_idx << 8);
 
-    // Face Normal Y (+ or -)
-    // Quad lies on XZ plane.
-    // Dimensions: Z is size 1.0 (constant). X is size (1.0 + face_length).
-
-    // 4: Down (-Y), 5: Up (+Y)
     float y_offset = (normal_idx == 5) ? 1.0 : 0.0;
-
     vec3 base = start + vec3(0.0, y_offset, 0.0);
     
     // Corners relative to base
-    // c0: (X, Z)
-    // c1: (X+Len, Z)
-    // c2: (X+Len, Z+1)
-    // c3: (X, Z+1)
-    
-    vec3 c0 = base + vec3(0.0, 0.0, 0.0);
+    vec3 c0 = base;
     vec3 c1 = base + vec3(1.0 + face_length, 0.0, 0.0);
     vec3 c2 = base + vec3(1.0 + face_length, 0.0, 1.0);
     vec3 c3 = base + vec3(0.0, 0.0, 1.0);
@@ -72,56 +53,65 @@ void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
     Vertex v[6];
 
     if (normal_idx == 5) { 
-        // Top Face (+Y): View from top. X is Right, Z is Down (towards user).
-        // CCW: c0 -> c1 -> c2 -> c3
+        // Top Face (+Y)
         v[0].position = c0; v[1].position = c1; v[2].position = c2;
         v[3].position = c0; v[4].position = c2; v[5].position = c3;
     } else { 
-        // Bottom Face (-Y): View from bottom.
-        // CCW: c0 -> c3 -> c2 -> c1
+        // Bottom Face (-Y)
         v[0].position = c0; v[1].position = c3; v[2].position = c2;
         v[3].position = c0; v[4].position = c2; v[5].position = c1;
     }
     
-    for(int i=0; i<6; i++) { 
-        v[i].packed_data = packed_val;
-        vertices[base_idx+i] = v[i]; 
-    }
+    v[0].packed_data = packed_val; vertices[base_idx+0] = v[0];
+    v[1].packed_data = packed_val; vertices[base_idx+1] = v[1];
+    v[2].packed_data = packed_val; vertices[base_idx+2] = v[2];
+    v[3].packed_data = packed_val; vertices[base_idx+3] = v[3];
+    v[4].packed_data = packed_val; vertices[base_idx+4] = v[4];
+    v[5].packed_data = packed_val; vertices[base_idx+5] = v[5];
 }
 
 void main() {
-    // Dispatch (Size X, Size Z). Map to ix, iz.
     uint ix = gl_GlobalInvocationID.x;
     uint iz = gl_GlobalInvocationID.y;
     vec3 size = instance_data.instance_size.xyz;
 
     if (ix >= size.x || iz >= size.z) return;
 
+    vec3 offset_size = size;
+    vec3 strip_base_pos = vec3(0, iz, ix); 
+    strip_base_pos += instance_data.instance_position_offset.yzx - 
+         vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
+
     uint prev_col_neg = 0; vec3 start_neg = vec3(-1); 
     uint prev_col_pos = 0; vec3 start_pos = vec3(-1); 
+    
+    uint size_y = uint(size.y);
 
-    // Sweep along Input Y (Output X)
-    for (uint iy = 0; iy < size.y; iy++) {
+    // Sweep along Input Y
+    for (uint iy = 0; iy < size_y; iy++) {
         uint curr = get_voxel(ix, iy, iz, size);
         
-        // Neighbors checked in Input Z direction (Output Y direction)
-        uint n_neg = (iz > 0) ? get_voxel(ix, iy, iz - 1, size) : 0;
-        uint n_pos = (iz < size.z - 1) ? get_voxel(ix, iy, iz + 1, size) : 0;
+        uint col_neg = 0;
+        uint col_pos = 0;
 
-        vec3 current_pos = get_pos_flipped(ix, iy, iz, size);
+        if (curr != 0) {
+            uint n_neg = (iz > 0) ? get_voxel(ix, iy, iz - 1, size) : 0;
+            uint n_pos = (iz < size.z - 1) ? get_voxel(ix, iy, iz + 1, size) : 0;
 
-        // --- Face -Y (Normal 4) ---
-        bool vis_neg = (curr != 0 && n_neg == 0); 
-        uint col_neg = vis_neg ? curr : 0;
+            if (n_neg == 0) col_neg = curr;
+            if (n_pos == 0) col_pos = curr;
+        }
+
+        vec3 current_pos = strip_base_pos + vec3(iy, 0, 0);
+
+        // --- Face -Y ---
         if (col_neg != prev_col_neg) {
             if (prev_col_neg != 0) create_face(start_neg, current_pos - vec3(1,0,0), prev_col_neg, 4);
             if (col_neg != 0) start_neg = current_pos;
         }
         prev_col_neg = col_neg;
 
-        // --- Face +Y (Normal 5) ---
-        bool vis_pos = (curr != 0 && n_pos == 0);
-        uint col_pos = vis_pos ? curr : 0;
+        // --- Face +Y ---
         if (col_pos != prev_col_pos) {
             if (prev_col_pos != 0) create_face(start_pos, current_pos - vec3(1,0,0), prev_col_pos, 5);
             if (col_pos != 0) start_pos = current_pos;
@@ -129,7 +119,7 @@ void main() {
         prev_col_pos = col_pos;
     }
 
-    vec3 end_pos = get_pos_flipped(ix, uint(size.y)-1, iz, size);
+    vec3 end_pos = strip_base_pos + vec3(size_y - 1, 0, 0);
     if (prev_col_neg != 0) create_face(start_neg, end_pos, prev_col_neg, 4);
     if (prev_col_pos != 0) create_face(start_pos, end_pos, prev_col_pos, 5);
 }
