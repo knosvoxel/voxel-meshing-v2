@@ -40,7 +40,9 @@ void VoxScene::load(const char* path)
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
 	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
-	meshingCompute = ComputeShader("../../shader/slicing_v2.comp");
+	meshingComputeX = ComputeShader("../../shader/slicing_x.comp");
+	meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
+	meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
 
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
@@ -146,7 +148,7 @@ void VoxScene::load(const char* path)
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO, instanceOffset, rotatedModelSize, meshingCompute, meshGenerationDuration, dispatchPre, dispatchPost);
+		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO, instanceOffset, rotatedModelSize, meshingComputeX, meshingComputeY, meshingComputeZ, meshGenerationDuration, dispatchPre, dispatchPost);
 		local.start();
 		dispatchPreTotal += dispatchPre;
 		dispatchPostTotal += dispatchPost;

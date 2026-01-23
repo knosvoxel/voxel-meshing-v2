@@ -32,7 +32,9 @@ struct VoxScene {
 			palette = other.palette;
 			shader = std::move(other.shader);
 			applyRotationsCompute = std::move(other.applyRotationsCompute);
-			meshingCompute = std::move(other.meshingCompute);
+			meshingComputeX = std::move(other.meshingComputeX);
+			meshingComputeY = std::move(other.meshingComputeY);
+			meshingComputeZ = std::move(other.meshingComputeZ);
 
 			// Leave the other object in a valid state
 			other.palette = 0;
@@ -53,5 +55,5 @@ struct VoxScene {
 	float64 total_draw_call_duration = 0.0;
 
 	Shader shader;
-	ComputeShader applyRotationsCompute, meshingCompute;
+	ComputeShader applyRotationsCompute, meshingComputeX, meshingComputeY, meshingComputeZ;
 };

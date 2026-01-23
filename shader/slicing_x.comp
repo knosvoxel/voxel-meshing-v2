@@ -1,0 +1,127 @@
+#version 460 core
+
+struct InstanceData{
+    vec3 instance_size;
+    uint _pad1;
+    vec3 instance_position_offset;
+    uint _pad2;
+};
+
+struct VoxelData{
+    uint four_voxels;
+};
+
+struct Vertex{
+    vec3 position;
+    uint packed_data; 
+};
+
+struct DrawArraysIndirectCommand{
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (binding = 0, std430) readonly buffer ssbo { VoxelData voxels[]; };
+layout (binding = 1, std430) writeonly buffer final_vertices { Vertex vertices[]; };
+layout (binding = 2, std430) buffer indirect_buffer { DrawArraysIndirectCommand indirect_command; };
+layout (binding = 3, std140) uniform instance_data_buffer { InstanceData instance_data; };
+
+uint get_voxel(uint x, uint y, uint z, vec3 size) {
+    if (x >= size.x || y >= size.y || z >= size.z) return 0;
+    uint idx = uint(x + y * size.x + z * size.x * size.y);
+    return (voxels[idx / 4].four_voxels >> (8 * (idx % 4))) & 255;
+}
+
+vec3 get_pos_flipped(uint x, uint y, uint z, vec3 offset_size) {
+    vec3 p = vec3(y, z, x);
+    p += instance_data.instance_position_offset.yzx - 
+         vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
+    return p;
+}
+
+void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
+    float face_length = end.z - start.z; 
+    uint base_idx = atomicAdd(indirect_command.count, 6);
+    uint packed_val = (col & 255) | (normal_idx << 8);
+
+    // 0: Left (-X), 1: Right (+X)
+    float x_offset = (normal_idx == 1) ? 1.0 : 0.0;
+    
+    vec3 base = start + vec3(x_offset, 0.0, 0.0);
+    
+    // c0: Bottom-Left (Y, Z)
+    // c1: Top-Left    (Y+1, Z)
+    // c2: Top-Right   (Y+1, Z+Len)
+    // c3: Bottom-Right(Y, Z+Len)
+    vec3 c0 = base + vec3(0.0, 0.0, 0.0);
+    vec3 c1 = base + vec3(0.0, 1.0, 0.0);
+    vec3 c2 = base + vec3(0.0, 1.0, 1.0 + face_length);
+    vec3 c3 = base + vec3(0.0, 0.0, 1.0 + face_length);
+
+    Vertex v[6];
+    
+    // --- FIXED WINDING ORDER HERE ---
+    if (normal_idx == 1) { 
+        // Right Face (+X)
+        // Previous (Broken): c0 -> c1 -> c2 (Clockwise -> Culled)
+        // Fixed: c0 -> c3 -> c2 (Counter-Clockwise -> Visible)
+        v[0].position = c0; v[1].position = c3; v[2].position = c2;
+        v[3].position = c0; v[4].position = c2; v[5].position = c1;
+    } else { 
+        // Left Face (-X)
+        // Previous (Broken): c0 -> c3 -> c2 (Clockwise -> Culled)
+        // Fixed: c0 -> c1 -> c2 (Counter-Clockwise -> Visible)
+        v[0].position = c0; v[1].position = c1; v[2].position = c2;
+        v[3].position = c0; v[4].position = c2; v[5].position = c3;
+    }
+    
+    for(int i=0; i<6; i++) { 
+        v[i].packed_data = packed_val;
+        vertices[base_idx+i] = v[i]; 
+    }
+}
+
+void main() {
+    uint iy = gl_GlobalInvocationID.x;
+    uint iz = gl_GlobalInvocationID.y;
+    vec3 size = instance_data.instance_size.xyz;
+
+    if (iy >= size.y || iz >= size.z) return;
+
+    uint prev_col_neg = 0; vec3 start_neg = vec3(-1); 
+    uint prev_col_pos = 0; vec3 start_pos = vec3(-1); 
+
+    for (uint ix = 0; ix < size.x; ix++) {
+        uint curr = get_voxel(ix, iy, iz, size);
+        uint n_neg = (iy > 0) ? get_voxel(ix, iy - 1, iz, size) : 0;
+        uint n_pos = (iy < size.y - 1) ? get_voxel(ix, iy + 1, iz, size) : 0;
+
+        vec3 current_pos = get_pos_flipped(ix, iy, iz, size);
+
+        bool vis_neg = (curr != 0 && n_neg == 0); 
+        uint col_neg = vis_neg ? curr : 0;
+
+        if (col_neg != prev_col_neg) {
+            if (prev_col_neg != 0) create_face(start_neg, current_pos - vec3(0,0,1), prev_col_neg, 0);
+            if (col_neg != 0) start_neg = current_pos;
+        }
+        prev_col_neg = col_neg;
+
+        bool vis_pos = (curr != 0 && n_pos == 0);
+        uint col_pos = vis_pos ? curr : 0;
+
+        if (col_pos != prev_col_pos) {
+            if (prev_col_pos != 0) create_face(start_pos, current_pos - vec3(0,0,1), prev_col_pos, 1);
+            if (col_pos != 0) start_pos = current_pos;
+        }
+        prev_col_pos = col_pos;
+    }
+
+    vec3 end_pos = get_pos_flipped(uint(size.x)-1, iy, iz, size);
+    if (prev_col_neg != 0) create_face(start_neg, end_pos, prev_col_neg, 0);
+    if (prev_col_pos != 0) create_face(start_pos, end_pos, prev_col_pos, 1);
+}

@@ -2,7 +2,7 @@
 
 #include "timer.h"
 
-void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& compute, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost)
+void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost)
 {
     Timer timer;
     timer.start();
@@ -31,7 +31,6 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
     glNamedBufferStorage(instanceDataBuffer, sizeof(InstanceData), &instanceData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
     glBindBufferBase(GL_UNIFORM_BUFFER, 3, instanceDataBuffer);
 
-    compute.use();
 
     uint32 meshingQuery;
     glGenQueries(1, &meshingQuery);
@@ -42,7 +41,15 @@ void VoxInstance::generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint3
     roundedSizeZ = (modelSize.z + 15) / 16;
     timer.stop();
     dispatchPre = timer.elapsedMilliseconds();
-    glDispatchCompute(roundedSizeX, 1, roundedSizeZ);
+
+    meshingX.use();
+    glDispatchCompute(roundedSizeY, roundedSizeZ, 1);
+
+    meshingY.use();
+    glDispatchCompute(roundedSizeX, roundedSizeZ, 1);
+
+    meshingZ.use();
+    glDispatchCompute(roundedSizeX, roundedSizeY, 1);
 
     glEndQuery(GL_TIME_ELAPSED);
 

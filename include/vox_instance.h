@@ -53,7 +53,7 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& compute, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
+	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
 
 	void render();
 
