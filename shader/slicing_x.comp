@@ -53,11 +53,11 @@ void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
     Vertex v[6];
     
     if (normal_idx == 1) { 
-        // Right (+X) - CCW: 0->3->2, 0->2->1
+        // Right (+X)
         v[0].position = c0; v[1].position = c3; v[2].position = c2;
         v[3].position = c0; v[4].position = c2; v[5].position = c1;
     } else { 
-        // Left (-X) - CCW: 0->1->2, 0->2->3
+        // Left (-X)
         v[0].position = c0; v[1].position = c1; v[2].position = c2;
         v[3].position = c0; v[4].position = c2; v[5].position = c3;
     }
@@ -78,7 +78,7 @@ void main() {
     if (iy >= size.y || iz >= size.z) return;
 
     vec3 offset_size = size;
-    vec3 strip_base_pos = vec3(iy, iz, 0); // Note: Z is 0 here, added in loop
+    vec3 strip_base_pos = vec3(iy, iz, 0);
     strip_base_pos += instance_data.instance_position_offset.yzx - 
          vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
 
