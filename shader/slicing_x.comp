@@ -16,10 +16,11 @@ struct Vertex{
     uint packed_data; 
 };
 
-struct DrawArraysIndirectCommand{
+struct DrawElementsIndirectCommand{
     uint count;
     uint instanceCount;
-    uint first;
+    uint firstIndex;
+    uint baseVertex;
     uint baseInstance;
 };
 
@@ -27,8 +28,9 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout (binding = 0, std430) readonly restrict buffer ssbo { VoxelData voxels[]; };
 layout (binding = 1, std430) writeonly restrict buffer final_vertices { Vertex vertices[]; };
-layout (binding = 2, std430) restrict buffer indirect_buffer { DrawArraysIndirectCommand indirect_command; };
-layout (binding = 3, std140) uniform instance_data_buffer { InstanceData instance_data; };
+layout (binding = 2, std430) writeonly restrict buffer final_indices { uint indices[];};
+layout (binding = 3, std430) restrict buffer indirect_buffer { DrawElementsIndirectCommand indirect_command; };
+layout (binding = 4, std140) uniform instance_data_buffer { InstanceData instance_data; };
 
 uint get_voxel(uint x, uint y, uint z, vec3 size) {
     uint idx = x + (y * uint(size.x)) + (z * uint(size.x) * uint(size.y));
@@ -39,35 +41,44 @@ void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
     float face_length = end.z - start.z; 
     
     uint base_idx = atomicAdd(indirect_command.count, 6);
+    uint base_vtx = (base_idx / 6) * 4;
     uint packed_val = (col & 255) | (normal_idx << 8);
 
     float x_offset = (normal_idx == 1) ? 1.0 : 0.0;
     vec3 base = start + vec3(x_offset, 0.0, 0.0);
-    
-    // Corners relative to base
-    vec3 c0 = base;
-    vec3 c1 = base + vec3(0.0, 1.0, 0.0);
-    vec3 c2 = base + vec3(0.0, 1.0, 1.0 + face_length);
-    vec3 c3 = base + vec3(0.0, 0.0, 1.0 + face_length);
 
-    Vertex v[6];
+    Vertex v[4];
     
+    v[0].position = base;                                    // c0
+    v[1].position = base + vec3(0.0, 1.0, 0.0);              // c1
+    v[2].position = base + vec3(0.0, 1.0, 1.0 + face_length);// c2
+    v[3].position = base + vec3(0.0, 0.0, 1.0 + face_length);// c3
+    
+    v[0].packed_data = packed_val;
+    v[1].packed_data = packed_val;
+    v[2].packed_data = packed_val;
+    v[3].packed_data = packed_val;
+
+    vertices[base_vtx + 0] = v[0];
+    vertices[base_vtx + 1] = v[1];
+    vertices[base_vtx + 2] = v[2];
+    vertices[base_vtx + 3] = v[3];
+
     if (normal_idx == 1) { 
-        // Right (+X)
-        v[0].position = c0; v[1].position = c3; v[2].position = c2;
-        v[3].position = c0; v[4].position = c2; v[5].position = c1;
+        indices[base_idx + 0] = base_vtx + 0;
+        indices[base_idx + 1] = base_vtx + 3;
+        indices[base_idx + 2] = base_vtx + 2;
+        indices[base_idx + 3] = base_vtx + 0;
+        indices[base_idx + 4] = base_vtx + 2;
+        indices[base_idx + 5] = base_vtx + 1;
     } else { 
-        // Left (-X)
-        v[0].position = c0; v[1].position = c1; v[2].position = c2;
-        v[3].position = c0; v[4].position = c2; v[5].position = c3;
+        indices[base_idx + 0] = base_vtx + 0;
+        indices[base_idx + 1] = base_vtx + 1;
+        indices[base_idx + 2] = base_vtx + 2;
+        indices[base_idx + 3] = base_vtx + 0;
+        indices[base_idx + 4] = base_vtx + 2;
+        indices[base_idx + 5] = base_vtx + 3;
     }
-    
-    v[0].packed_data = packed_val; vertices[base_idx+0] = v[0];
-    v[1].packed_data = packed_val; vertices[base_idx+1] = v[1];
-    v[2].packed_data = packed_val; vertices[base_idx+2] = v[2];
-    v[3].packed_data = packed_val; vertices[base_idx+3] = v[3];
-    v[4].packed_data = packed_val; vertices[base_idx+4] = v[4];
-    v[5].packed_data = packed_val; vertices[base_idx+5] = v[5];
 }
 
 void main() {

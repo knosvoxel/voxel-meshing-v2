@@ -17,10 +17,11 @@ typedef struct Vertex {
 	uint32 packedData; // Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
 };
 
-typedef struct DrawArraysIndirectCommand {
+typedef struct DrawElementsIndirectCommand {
 	uint32 count;
 	uint32 instanceCount;
-	uint32 first;
+	uint32 firstIndex;
+	int32 baseVertex;
 	uint32 baseInstance;
 };
 
@@ -53,12 +54,12 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
+	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO_V, uint32 meshingSSBO_I, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
 
 	void render();
 
 	void cleanup();
 
-	uint32 vbo = 0, vao = 0, indirectCommand = 0, instanceDataBuffer = 0,
+	uint32 vbo = 0, vao = 0, ibo, indirectCommand = 0, instanceDataBuffer = 0,
 		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0;
 };
