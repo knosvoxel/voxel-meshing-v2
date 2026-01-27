@@ -97,15 +97,19 @@ void VoxScene::load(const char* path)
 	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms\n" << std::endl;
 
 	// create temporary worst case buffer
-	uint32 meshingSSBO_V, meshingSSBO_I;
+	uint32 meshingSSBO_V, meshingSSBO_I, meshingSSBO_P;
 	glCreateBuffers(1, &meshingSSBO_V);
 	glCreateBuffers(1, &meshingSSBO_I);
+	glCreateBuffers(1, &meshingSSBO_P);
 
 	// 24 vertices per voxel max, 4 on each side
 	glNamedBufferStorage(meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 	// 36 indices per voxel max, 6 on each side
 	glNamedBufferStorage(meshingSSBO_I, maxSize * sizeof(uint32) * 6 * 6,
+		nullptr, GL_DYNAMIC_STORAGE_BIT);
+	// 6 packed_data per voxel max, 1 on each side
+	glNamedBufferStorage(meshingSSBO_P, maxSize * sizeof(uint32) * 6 * 1,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 
 	// DEBUG INFORMATION //
@@ -154,7 +158,7 @@ void VoxScene::load(const char* path)
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO_V, meshingSSBO_I, instanceOffset, rotatedModelSize, meshingComputeX, meshingComputeY, meshingComputeZ, meshGenerationDuration, dispatchPre, dispatchPost);
+		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO_V, meshingSSBO_I, meshingSSBO_P, instanceOffset, rotatedModelSize, meshingComputeX, meshingComputeY, meshingComputeZ, meshGenerationDuration, dispatchPre, dispatchPost);
 		local.start();
 		dispatchPreTotal += dispatchPre;
 		dispatchPostTotal += dispatchPost;
@@ -200,6 +204,7 @@ void VoxScene::load(const char* path)
 
 	glDeleteBuffers(1, &meshingSSBO_V);
 	glDeleteBuffers(1, &meshingSSBO_I);
+	glDeleteBuffers(1, &meshingSSBO_P);
 
 	timerTotal.stop();
 

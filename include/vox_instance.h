@@ -13,8 +13,7 @@ typedef struct InstanceData {
 };
 
 typedef struct Vertex {
-	vec3 pos;
-	uint32 packedData; // Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
+	float32 x, y, z;
 };
 
 typedef struct DrawElementsIndirectCommand {
@@ -35,14 +34,18 @@ struct VoxInstance {
 			cleanup();
 
 			// Move data
-			vbo = other.vbo;
 			vao = other.vao;
+			ibo = other.ibo;
+			vertexSSBO = other.vertexSSBO;
+			packedSSBO = other.packedSSBO;
 			indirectCommand = other.indirectCommand;
 			instanceDataBuffer = other.instanceDataBuffer;
 
 			// Leave the other object in a valid state
-			other.vbo = 0;
 			other.vao = 0;
+			other.ibo = 0;
+			other.vertexSSBO = 0;
+			other.packedSSBO = 0;
 			other.indirectCommand = 0;
 			other.instanceDataBuffer = 0;
 		}
@@ -54,12 +57,14 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO_V, uint32 meshingSSBO_I, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
+	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO_V, uint32 meshingSSBO_I, uint32 meshingSSBO_P, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
 
 	void render();
 
 	void cleanup();
 
-	uint32 vbo = 0, vao = 0, ibo, indirectCommand = 0, instanceDataBuffer = 0,
+	uint32 //vbo = 0, 
+		vao = 0, 
+		ibo = 0, vertexSSBO = 0, packedSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
 		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0;
 };

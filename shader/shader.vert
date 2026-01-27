@@ -1,6 +1,16 @@
 #version 460 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in uint packed_data; // normal & color index
+
+struct Vertex{
+	float x, y, z;
+};
+
+layout(binding = 0, std430) readonly restrict buffer vertexBuffer {
+	Vertex vertices[];
+};
+
+layout(binding = 1, std430) readonly restrict buffer packedDataBuffer {
+	uint packedData[];
+};
 
 uniform mat4 mvp;
 	
@@ -9,8 +19,13 @@ flat out uint normal_idx;
 	
 void main()
 {
-    color_idx = packed_data & 255;
-	normal_idx = (packed_data >> 8) & 7; // loweset 3 bits as only values from 0 - 5 are used
+	Vertex v = vertices[gl_VertexID];
+	vec3 pos = vec3(v.x, v.y, v.z);
 
-	gl_Position = mvp * vec4(aPos, 1.0);
+	uint data = packedData[gl_VertexID / 4];
+
+    color_idx = data & 255;
+	normal_idx = (data >> 8) & 7; // loweset 3 bits as only values from 0 - 5 are used
+
+	gl_Position = mvp * vec4(pos, 1.0);
 }
