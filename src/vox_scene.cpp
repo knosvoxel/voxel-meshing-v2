@@ -40,9 +40,9 @@ void VoxScene::load(const char* path)
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
 	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
-	meshingComputeX = ComputeShader("../../shader/slicing_x.comp");
-	meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
-	meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
+	meshingShaders.meshingComputeX = ComputeShader("../../shader/slicing_x.comp");
+	meshingShaders.meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
+	meshingShaders.meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
 
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
@@ -97,19 +97,18 @@ void VoxScene::load(const char* path)
 	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms\n" << std::endl;
 
 	// create temporary worst case buffer
-	uint32 meshingSSBO_V, meshingSSBO_I, meshingSSBO_P;
-	glCreateBuffers(1, &meshingSSBO_V);
-	glCreateBuffers(1, &meshingSSBO_I);
-	glCreateBuffers(1, &meshingSSBO_P);
+	glCreateBuffers(1, &buffers.meshingSSBO_V);
+	glCreateBuffers(1, &buffers.meshingSSBO_I);
+	glCreateBuffers(1, &buffers.meshingSSBO_P);
 
 	// 24 vertices per voxel max, 4 on each side
-	glNamedBufferStorage(meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4,
+	glNamedBufferStorage(buffers.meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4 / 2,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 	// 36 indices per voxel max, 6 on each side
-	glNamedBufferStorage(meshingSSBO_I, maxSize * sizeof(uint32) * 6 * 6,
+	glNamedBufferStorage(buffers.meshingSSBO_I, maxSize * sizeof(uint32) * 6 * 6,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 	// 6 packed_data per voxel max, 1 on each side
-	glNamedBufferStorage(meshingSSBO_P, maxSize * sizeof(uint32) * 6 * 1,
+	glNamedBufferStorage(buffers.meshingSSBO_P, maxSize * sizeof(uint32) * 6 * 1,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 
 	// DEBUG INFORMATION //
@@ -150,18 +149,19 @@ void VoxScene::load(const char* path)
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
 		rotationComputeDurationTotal += rotationDuration;
 
-		float64 meshGenerationDuration = 0.0;
-		float64 dispatchPre = 0.0;
-		float64 dispatchPost = 0.0;
-		float64 copyDuration = 0.0;
-		
+		InstanceData instanceData;
+		instanceData.modelSize = rotatedModelSize;
+		instanceData.worldOffset = instanceOffset;
+
+		MeasurementData measurements;
+
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateMesh(vertexCount, rotatedModelBuffer, meshingSSBO_V, meshingSSBO_I, meshingSSBO_P, instanceOffset, rotatedModelSize, meshingComputeX, meshingComputeY, meshingComputeZ, meshGenerationDuration, dispatchPre, dispatchPost);
+		instances.back().generateMesh(rotatedModelBuffer, buffers, meshingShaders, instanceData, measurements);
 		local.start();
-		dispatchPreTotal += dispatchPre;
-		dispatchPostTotal += dispatchPost;
+		dispatchPreTotal += measurements.dispatchPre;
+		dispatchPostTotal += measurements.dispatchPost;
 
 		glDeleteBuffers(1, &rotatedModelBuffer);
 
@@ -169,9 +169,10 @@ void VoxScene::load(const char* path)
 		totalSizeY += currModel->size_y;
 		totalSizeZ += currModel->size_z;
 
-		meshingDurationTotal += meshGenerationDuration;
-		if (meshGenerationDuration < meshingDurationMin) meshingDurationMin = meshGenerationDuration;
-		if (meshGenerationDuration > meshingDurationMax) meshingDurationMax = meshGenerationDuration;
+		float64& dispatchDuration = measurements.meshGenerationDuration;
+		meshingDurationTotal += dispatchDuration;
+		if (dispatchDuration < meshingDurationMin) meshingDurationMin = dispatchDuration;
+		if (dispatchDuration > meshingDurationMax) meshingDurationMax = dispatchDuration;
 		local.stop();
 		forPostGenerate += local.elapsedMilliseconds();
 	}
@@ -202,9 +203,9 @@ void VoxScene::load(const char* path)
 
 	ogt_vox_destroy_scene(voxScene);
 
-	glDeleteBuffers(1, &meshingSSBO_V);
-	glDeleteBuffers(1, &meshingSSBO_I);
-	glDeleteBuffers(1, &meshingSSBO_P);
+	glDeleteBuffers(1, &buffers.meshingSSBO_V);
+	glDeleteBuffers(1, &buffers.meshingSSBO_I);
+	glDeleteBuffers(1, &buffers.meshingSSBO_P);
 
 	timerTotal.stop();
 

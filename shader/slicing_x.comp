@@ -1,9 +1,10 @@
 #version 460 core
+#extension GL_NV_gpu_shader5 : enable
 
 struct InstanceData{
-    vec3 instance_size;
+    vec3 modelSize;
     uint _pad1;
-    vec3 instance_position_offset;
+    vec3 worldOffset;
     uint _pad2;
 };
 
@@ -12,7 +13,7 @@ struct VoxelData{
 };
 
 struct Vertex{
-    float x, y, z;
+    float16_t x, y, z;
 };
 
 struct DrawElementsIndirectCommand{
@@ -57,10 +58,10 @@ void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
     vec3 pos2 = base + vec3(0.0, 1.0, 1.0 + face_length);
     vec3 pos3 = base + vec3(0.0, 0.0, 1.0 + face_length);
 
-    vertices[base_vtx + 0] = Vertex(pos0.x, pos0.y, pos0.z);
-    vertices[base_vtx + 1] = Vertex(pos1.x, pos1.y, pos1.z);
-    vertices[base_vtx + 2] = Vertex(pos2.x, pos2.y, pos2.z);
-    vertices[base_vtx + 3] = Vertex(pos3.x, pos3.y, pos3.z);
+    vertices[base_vtx + 0] = Vertex(float16_t(pos0.x), float16_t(pos0.y), float16_t(pos0.z));
+    vertices[base_vtx + 1] = Vertex(float16_t(pos1.x), float16_t(pos1.y), float16_t(pos1.z));
+    vertices[base_vtx + 2] = Vertex(float16_t(pos2.x), float16_t(pos2.y), float16_t(pos2.z));
+    vertices[base_vtx + 3] = Vertex(float16_t(pos3.x), float16_t(pos3.y), float16_t(pos3.z));
 
     if (normal_idx == 1) { 
         indices[base_idx + 0] = base_vtx + 0;
@@ -82,13 +83,13 @@ void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
 void main() {
     uint iy = gl_GlobalInvocationID.x;
     uint iz = gl_GlobalInvocationID.y;
-    vec3 size = instance_data.instance_size.xyz;
+    vec3 size = instance_data.modelSize.xyz;
 
     if (iy >= size.y || iz >= size.z) return;
 
     vec3 offset_size = size;
     vec3 strip_base_pos = vec3(iy, iz, 0);
-    strip_base_pos += instance_data.instance_position_offset.yzx - 
+    strip_base_pos += instance_data.worldOffset.yzx - 
          vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
 
     uint prev_col_neg = 0; vec3 start_neg = vec3(-1); 

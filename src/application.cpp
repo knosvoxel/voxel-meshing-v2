@@ -112,6 +112,15 @@ void Application::initOpenGL()
     //glDepthFunc(GL_ALWAYS);
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    //int n;
+    //glGetIntegerv(GL_NUM_EXTENSIONS, &n);
+    //for (int i = 0; i < n; i++) {
+    //    const char* extension = (const char*)glGetStringi(GL_EXTENSIONS, i);
+    //    if (strstr(extension, "half_float") || strstr(extension, "float16")) {
+    //        printf("Supported: %s\n", extension);
+    //    }
+    //}
+
     if (enableWireframe) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     }

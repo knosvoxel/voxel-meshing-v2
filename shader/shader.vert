@@ -1,7 +1,8 @@
 #version 460 core
+#extension GL_NV_gpu_shader5 : enable
 
 struct Vertex{
-	float x, y, z;
+	float16_t x, y, z;
 };
 
 layout(binding = 0, std430) readonly restrict buffer vertexBuffer {

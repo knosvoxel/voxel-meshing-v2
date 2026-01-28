@@ -6,10 +6,31 @@
 using namespace glm;
 
 typedef struct InstanceData {
-	vec3 instanceDimensions;
+	vec3 modelSize;
 	uint32 _pad1 = 0;
-	vec3 offset;
+	vec3 worldOffset;
 	uint32 _pad2 = 0;
+};
+
+typedef struct MeshingBuffers {
+	uint32 meshingSSBO_V;
+	uint32 meshingSSBO_I;
+	uint32 meshingSSBO_P;
+};
+
+typedef struct MeshingShaders {
+	ComputeShader meshingComputeX;
+	ComputeShader meshingComputeY;
+	ComputeShader meshingComputeZ;
+};
+
+typedef struct MeasurementData {
+	float64 meshGenerationDuration;
+	float64 dispatchPre; 
+	float64 dispatchPost;
+	uint32 vertexCount = 0;
+	uint32 indexCount = 0;
+	uint32 packedDataCount = 0;
 };
 
 typedef struct Vertex {
@@ -57,7 +78,7 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void generateMesh(uint32& totalVertexCount, uint32 modelSSBO, uint32 meshingSSBO_V, uint32 meshingSSBO_I, uint32 meshingSSBO_P, vec3 offset, ivec3 modelSize, ComputeShader& meshingX, ComputeShader& meshingY, ComputeShader& meshingZ, float64& dispatchDuration, float64& dispatchPre, float64& dispatchPost);
+	void generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, InstanceData& instanceData, MeasurementData& measurements);
 
 	void render();
 
