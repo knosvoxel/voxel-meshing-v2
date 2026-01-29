@@ -62,6 +62,8 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
     uint32 faceCount = indexCount / 6;
 
     measurements.vertexCount += vertexCount;
+    measurements.indexCount += indexCount;
+    measurements.packedDataCount += faceCount;
 
     int32 available = 0;
     while (!available) {

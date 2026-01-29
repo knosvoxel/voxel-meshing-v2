@@ -50,10 +50,12 @@ struct VoxScene {
 	std::vector<VoxInstance> instances;
 
 	MeshingBuffers buffers;
-	uint32 palette = 0, voxelCount = 0, vertexCount = 0, numInstances = 0;
+	uint32 palette = 0, numInstances = 0;
 
 	float64 total_draw_call_duration = 0.0;
 	
+	MeasurementData measurements;
+
 	MeshingShaders meshingShaders;
 	Shader shader;
 	ComputeShader applyRotationsCompute;

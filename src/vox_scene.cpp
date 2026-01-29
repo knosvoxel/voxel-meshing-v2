@@ -153,8 +153,6 @@ void VoxScene::load(const char* path)
 		instanceData.modelSize = rotatedModelSize;
 		instanceData.worldOffset = instanceOffset;
 
-		MeasurementData measurements;
-
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
