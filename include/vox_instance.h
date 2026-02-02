@@ -34,7 +34,7 @@ typedef struct MeasurementData {
 };
 
 typedef struct Vertex {
-	float32 x, y, z;
+	int16 x, y, z; // mainly used for buffer size, actually float16 in compute shaders
 };
 
 typedef struct DrawElementsIndirectCommand {

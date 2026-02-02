@@ -79,8 +79,8 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
 
     if (vertexCount > 0) {
         glCreateBuffers(1, &vertexSSBO);
-        glNamedBufferStorage(vertexSSBO, sizeof(Vertex) * vertexCount / 2, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_V, vertexSSBO, 0, 0, sizeof(Vertex) * vertexCount / 2);
+        glNamedBufferStorage(vertexSSBO, sizeof(Vertex) * vertexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
+        glCopyNamedBufferSubData(buffers.meshingSSBO_V, vertexSSBO, 0, 0, sizeof(Vertex) * vertexCount);
 
         glCreateBuffers(1, &packedSSBO);
         glNamedBufferStorage(packedSSBO, sizeof(uint32) * faceCount, nullptr, GL_DYNAMIC_STORAGE_BIT);

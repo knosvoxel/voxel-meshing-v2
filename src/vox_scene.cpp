@@ -102,7 +102,7 @@ void VoxScene::load(const char* path)
 	glCreateBuffers(1, &buffers.meshingSSBO_P);
 
 	// 24 vertices per voxel max, 4 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4 / 2,
+	glNamedBufferStorage(buffers.meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4,
 		nullptr, GL_DYNAMIC_STORAGE_BIT);
 	// 36 indices per voxel max, 6 on each side
 	glNamedBufferStorage(buffers.meshingSSBO_I, maxSize * sizeof(uint32) * 6 * 6,
