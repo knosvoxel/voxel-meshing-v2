@@ -4,7 +4,7 @@ const uint32 WIDTH = 1600;
 const uint32 HEIGHT = 900;
 
 const char* WINDOW_NAME = "Voxel Meshing";
-const char* VOX_FILE_PATH = "../../res/castle.vox";
+const char* VOX_FILE_PATH = "../../res/castle_small.vox";
 
 const float NEAR = 0.1f;
 const float FAR = 10000.0f;

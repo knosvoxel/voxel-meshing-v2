@@ -88,8 +88,8 @@ void main() {
     if (iy >= size.y || iz >= size.z) return;
 
     vec3 offset_size = size;
-    vec3 strip_base_pos = vec3(iy, iz, 0);
-    strip_base_pos += instance_data.worldOffset.yzx - 
+    vec3 strip_base = vec3(iy, iz, 0);
+    strip_base += instance_data.worldOffset.yzx - 
          vec3(floor(offset_size.y / 2.0), floor(offset_size.z / 2.0), floor(offset_size.x / 2.0));
 
     uint prev_col_neg = 0; vec3 start_neg = vec3(-1); 
@@ -105,14 +105,14 @@ void main() {
         uint col_pos = 0;
 
         if (curr != 0) {
-            uint n_neg = (iy > 0) ? get_voxel(ix, iy - 1, iz, size) : 0;
-            uint n_pos = (iy < size.y - 1) ? get_voxel(ix, iy + 1, iz, size) : 0;
+            uint neigh_col_neg = (iy > 0) ? get_voxel(ix, iy - 1, iz, size) : 0;
+            uint neigh_col_pos = (iy < size.y - 1) ? get_voxel(ix, iy + 1, iz, size) : 0;
             
-            if (n_neg == 0) col_neg = curr;
-            if (n_pos == 0) col_pos = curr;
+            if (neigh_col_neg == 0) col_neg = curr;
+            if (neigh_col_pos == 0) col_pos = curr;
         }
         
-        vec3 current_pos = strip_base_pos + vec3(0, 0, ix);
+        vec3 current_pos = strip_base + vec3(0, 0, ix);
 
         // --- Face -X ---
         if (col_neg != prev_col_neg) {
@@ -129,7 +129,7 @@ void main() {
         prev_col_pos = col_pos;
     }
 
-    vec3 end_pos = strip_base_pos + vec3(0, 0, size_x - 1);
+    vec3 end_pos = strip_base + vec3(0, 0, size_x - 1);
     if (prev_col_neg != 0) create_face(start_neg, end_pos, prev_col_neg, 0);
     if (prev_col_pos != 0) create_face(start_pos, end_pos, prev_col_pos, 1);
 }
