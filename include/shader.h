@@ -9,8 +9,6 @@
 #include <sstream>
 #include <iostream>
 
-#include <filesystem>
-
 class Shader
 {
 public:
