@@ -127,4 +127,6 @@ void VoxInstance::cleanup()
     glDeleteBuffers(1, &indirectCommand);
     glDeleteBuffers(1, &instanceDataBuffer);
     glDeleteBuffers(1, &rotatedModelSSBO);
+    
+    free(voxelData);
 }

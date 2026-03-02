@@ -84,6 +84,8 @@ struct VoxInstance {
 
 	void cleanup();
 
+	uint8* voxelData;
+
 	uint32 //vbo = 0, 
 		vao = 0, 
 		ibo = 0, vertexSSBO = 0, packedSSBO = 0, rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,

@@ -155,7 +155,6 @@ void VoxScene::load(const char* path)
 		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
 		glCreateBuffers(1, &rotatedModelSSBO);
 		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x* rotatedModelSize.y* rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
-		free(rotatedModelData);
 #else
 		createRotatedModelBuffer(voxScene, i, rotatedModelSSBO, applyRotationsCompute, rotatedModelSize, rotationDuration);
 #endif
@@ -171,6 +170,7 @@ void VoxScene::load(const char* path)
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
 		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, instanceData, measurements);
+		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK?
 		local.start();
 		dispatchPreTotal += measurements.dispatchPre;
 		dispatchPostTotal += measurements.dispatchPost;
