@@ -155,6 +155,7 @@ void VoxScene::load(const char* path)
 		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
 		glCreateBuffers(1, &rotatedModelSSBO);
 		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x* rotatedModelSize.y* rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
+		delete[] rotatedModelData;
 #else
 		createRotatedModelBuffer(voxScene, i, rotatedModelSSBO, applyRotationsCompute, rotatedModelSize, rotationDuration);
 #endif
