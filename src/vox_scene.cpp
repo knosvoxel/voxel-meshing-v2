@@ -367,24 +367,24 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 	rotatedModelSize = ivec3(maxBounds - minBounds) + ivec3(1);
 
 	size_t numVoxels = (size_t)rotatedModelSize.x * rotatedModelSize.y * rotatedModelSize.z;
-	uint8_t* outData = (uint8_t*)calloc(numVoxels, sizeof(uint8_t));
+	uint8* outData = (uint8*)calloc(numVoxels, sizeof(uint8));
 
-	uint32 srcX = model->size_x;
-	uint32 srcY = model->size_y;
-	uint32 srcZ = model->size_z;
+	uint32 sizeX = model->size_x;
+	uint32 sizeY = model->size_y;
+	uint32 sizeZ = model->size_z;
 
 #pragma omp parallel for collapse(2) schedule(static)
-	for (int z = 0; z < srcZ; ++z) {
-		for (int y = 0; y < srcY; ++y) {
-			for (int x = 0; x < srcX; ++x) {
+	for (int32 z = 0; z < sizeZ; ++z) {
+		for (int32 y = 0; y < sizeY; ++y) {
+			for (int32 x = 0; x < sizeX; ++x) {
 
-				uint32_t srcIdx = x + (y * srcX) + (z * srcX * srcY);
-				uint8_t colorIdx = model->voxel_data[srcIdx];
+				uint32 srcIdx = x + (y * sizeX) + (z * sizeX * sizeY);
+				uint8 colIdx = model->voxel_data[srcIdx];
 
-				if (colorIdx == 0) continue;
+				if (colIdx == 0) continue;
 
 				// Apply transform
-				vec4 rotatedPos = floor(transformMat * vec4((float)x, (float)y, (float)z, 1.0f));
+				vec4 rotatedPos = floor(transformMat * vec4((float32)x, (float32)y, (float32)z, 1.0f));
 				ivec3 finalPos = ivec3(vec3(rotatedPos.x, rotatedPos.y, rotatedPos.z) - minBounds);
 
 				// Bounds check
@@ -392,8 +392,8 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 					finalPos.y >= 0 && finalPos.y < rotatedModelSize.y &&
 					finalPos.z >= 0 && finalPos.z < rotatedModelSize.z)
 				{
-					uint32_t dstIdx = finalPos.x + (finalPos.y * rotatedModelSize.x) + (finalPos.z * rotatedModelSize.x * rotatedModelSize.y);
-					outData[dstIdx] = colorIdx;
+					uint32 dstIdx = finalPos.x + (finalPos.y * rotatedModelSize.x) + (finalPos.z * rotatedModelSize.x * rotatedModelSize.y);
+					outData[dstIdx] = colIdx;
 				}
 			}
 		}
