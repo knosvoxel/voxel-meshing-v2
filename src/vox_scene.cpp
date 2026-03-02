@@ -14,23 +14,23 @@ inline ivec3 calc_transform(const mat4& mat, const vec3& pos)
 	return floor(mat * vec4(pos, 1.0f));
 }
 
-static inline vec4 instance_pivot(const ogt_vox_model* model) {
+static inline vec4 instancePivot(const ogt_vox_model* model) {
 	return floor(vec4(model->size_x / 2, model->size_y / 2, model->size_z / 2, 0.0f));
 }
 
-static inline vec3 volume_size(const ogt_vox_model* model) {
+static inline vec3 volumeSize(const ogt_vox_model* model) {
 	return vec3(model->size_x - 1, model->size_y - 1, model->size_z - 1);
 }
 
 
-static mat4 ogt_transform_to_glm(const ogt_vox_scene* scene, const ogt_vox_instance& instance, const ogt_vox_model* model)
+static mat4 ogtTransformToGLM(const ogt_vox_scene* scene, const ogt_vox_instance& instance, const ogt_vox_model* model)
 {
 	ogt_vox_transform t = ogt_vox_sample_instance_transform(&instance, 0, scene);
 	const vec4 col0(t.m00, t.m01, t.m02, t.m03);
 	const vec4 col1(t.m10, t.m11, t.m12, t.m13);
 	const vec4 col2(t.m20, t.m21, t.m22, t.m23);
 	const vec4 col3(t.m30, t.m31, t.m32, t.m33);
-	const vec3& pivot = instance_pivot(model);
+	const vec3& pivot = instancePivot(model);
 	return compute_transform_mat(glm::mat4(col0, col1, col2, col3), pivot);
 }
 
@@ -250,7 +250,7 @@ void VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 insta
 {
 	const ogt_vox_instance& instance = scene->instances[instanceIdx];
 	const ogt_vox_model* model = scene->models[instance.model_index];
-	mat4& transformMat = ogt_transform_to_glm(scene, instance, model);
+	mat4& transformMat = ogtTransformToGLM(scene, instance, model);
 
 	vec3 corners[8] = {
 		{0, 0, 0},
@@ -341,7 +341,7 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 {
 	const ogt_vox_instance& instance = scene->instances[instanceIdx];
 	const ogt_vox_model* model = scene->models[instance.model_index];
-	mat4 transformMat = ogt_transform_to_glm(scene, instance, model);
+	mat4 transformMat = ogtTransformToGLM(scene, instance, model);
 
 	vec3 corners[8] = {
 		{0, 0, 0}, {model->size_x - 1, 0, 0}, 
