@@ -1,5 +1,7 @@
 #include "vox_scene.h"
 
+#define ROTATE_CPU
+
 static inline mat4 compute_transform_mat(const mat4 transform, const vec3& pivot) {
 	static const mat4 shift_matrix = translate(mat4(1.0f), vec3(0.5f));
 	const mat4 pivot_matrix = translate(mat4(1.0f), -pivot);
@@ -145,7 +147,18 @@ void VoxScene::load(const char* path)
 		float64 rotationDuration = 0.0;
 
 		float64 rotPre = local.elapsedMilliseconds();
-		uint32 rotatedModelBuffer = createRotatedModelBuffer(voxScene, i, applyRotationsCompute, rotatedModelSize, rotationDuration);
+		
+		// created rotated model with CPU or GPU
+		// CPU is more similar to ray marching version
+		uint32 rotatedModelSSBO = 0;
+#ifdef ROTATE_CPU
+		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
+		glCreateBuffers(1, &rotatedModelSSBO);
+		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x* rotatedModelSize.y* rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
+#else
+		createRotatedModelBuffer(voxScene, i, rotatedModelSSBO, applyRotationsCompute, rotatedModelSize, rotationDuration);
+#endif
+
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
 		rotationComputeDurationTotal += rotationDuration;
 
@@ -156,12 +169,10 @@ void VoxScene::load(const char* path)
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateMesh(rotatedModelBuffer, buffers, meshingShaders, instanceData, measurements);
+		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, instanceData, measurements);
 		local.start();
 		dispatchPreTotal += measurements.dispatchPre;
 		dispatchPostTotal += measurements.dispatchPost;
-
-		glDeleteBuffers(1, &rotatedModelBuffer);
 
 		totalSizeX += currModel->size_x;
 		totalSizeY += currModel->size_y;
@@ -171,6 +182,7 @@ void VoxScene::load(const char* path)
 		meshingDurationTotal += dispatchDuration;
 		if (dispatchDuration < meshingDurationMin) meshingDurationMin = dispatchDuration;
 		if (dispatchDuration > meshingDurationMax) meshingDurationMax = dispatchDuration;
+
 		local.stop();
 		forPostGenerate += local.elapsedMilliseconds();
 	}
@@ -234,7 +246,7 @@ void VoxScene::cleanup()
 	glDeleteTextures(1, &palette);
 }
 
-uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, ComputeShader& compute, ivec3& rotatedModelSize, float64& dispatchDuration)
+void VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, uint32& rotatedModelSSBO, ComputeShader& compute, ivec3& rotatedModelSize, float64& dispatchDuration)
 {
 	const ogt_vox_instance& instance = scene->instances[instanceIdx];
 	const ogt_vox_model* model = scene->models[instance.model_index];
@@ -267,7 +279,7 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 	// apply_rotations_compute
 	const uint8* voxelData = model->voxel_data;
 
-	uint32 instanceTempSSBO, rotatedModelSSBO;
+	uint32 instanceTempSSBO;
 	glCreateBuffers(1, &instanceTempSSBO);
 	glCreateBuffers(1, &rotatedModelSSBO);
 
@@ -323,6 +335,70 @@ uint32 VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 ins
 
 	glDeleteBuffers(1, &instanceTempSSBO);
 	glDeleteBuffers(1, &rotationDataUBO);
+}
 
-	return rotatedModelSSBO;
+uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instanceIdx, ivec3& rotatedModelSize, float64& dispatchDuration)
+{
+	const ogt_vox_instance& instance = scene->instances[instanceIdx];
+	const ogt_vox_model* model = scene->models[instance.model_index];
+	mat4 transformMat = ogt_transform_to_glm(scene, instance, model);
+
+	vec3 corners[8] = {
+		{0, 0, 0}, {model->size_x - 1, 0, 0}, 
+		{0, model->size_y - 1, 0}, 
+		{0, 0, model->size_z - 1},
+		{model->size_x - 1, model->size_y - 1, 0}, 
+		{model->size_x - 1, 0, model->size_z - 1},
+		{0, model->size_y - 1, model->size_z - 1}, 
+		{model->size_x - 1, model->size_y - 1, model->size_z - 1}
+	};
+
+	vec3 minBounds(FLT_MAX);
+	vec3 maxBounds(-FLT_MAX);
+
+	for (int i = 0; i < 8; ++i) {
+		vec4 transformedCorner = transformMat * vec4(corners[i], 1.0f);
+		vec3 flooredCorner = floor(vec3(transformedCorner));
+		minBounds = min(minBounds, flooredCorner);
+		maxBounds = max(maxBounds, flooredCorner);
+	}
+
+	rotatedModelSize = ivec3(maxBounds - minBounds) + ivec3(1);
+
+	size_t numVoxels = (size_t)rotatedModelSize.x * rotatedModelSize.y * rotatedModelSize.z;
+	uint8_t* outData = (uint8_t*)calloc(numVoxels, sizeof(uint8_t));
+
+	uint32 srcX = model->size_x;
+	uint32 srcY = model->size_y;
+	uint32 srcZ = model->size_z;
+
+#pragma omp parallel for collapse(2) schedule(static)
+	for (int z = 0; z < srcZ; ++z) {
+		for (int y = 0; y < srcY; ++y) {
+			for (int x = 0; x < srcX; ++x) {
+
+				uint32_t srcIdx = x + (y * srcX) + (z * srcX * srcY);
+				uint8_t colorIdx = model->voxel_data[srcIdx];
+
+				if (colorIdx == 0) continue;
+
+				// Apply transform
+				vec4 rotatedPos = floor(transformMat * vec4((float)x, (float)y, (float)z, 1.0f));
+				ivec3 finalPos = ivec3(vec3(rotatedPos.x, rotatedPos.y, rotatedPos.z) - minBounds);
+
+				// Bounds check
+				if (finalPos.x >= 0 && finalPos.x < rotatedModelSize.x &&
+					finalPos.y >= 0 && finalPos.y < rotatedModelSize.y &&
+					finalPos.z >= 0 && finalPos.z < rotatedModelSize.z)
+				{
+					uint32_t dstIdx = finalPos.x + (finalPos.y * rotatedModelSize.x) + (finalPos.z * rotatedModelSize.x * rotatedModelSize.y);
+					outData[dstIdx] = colorIdx;
+				}
+			}
+		}
+	}
+
+	auto endTime = std::chrono::high_resolution_clock::now();
+
+	return outData;
 }

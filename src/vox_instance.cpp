@@ -6,6 +6,9 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
 {
     Timer timer;
     timer.start();
+
+    rotatedModelSSBO = modelSSBO;
+
     DrawElementsIndirectCommand indirectData{};
     indirectData.count = 0;
     indirectData.instanceCount = 1;
@@ -123,4 +126,5 @@ void VoxInstance::cleanup()
     glDeleteBuffers(1, &ibo);
     glDeleteBuffers(1, &indirectCommand);
     glDeleteBuffers(1, &instanceDataBuffer);
+    glDeleteBuffers(1, &rotatedModelSSBO);
 }

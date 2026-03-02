@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <algorithm>
+#include <omp.h>
+#include <chrono>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -18,7 +20,6 @@ typedef struct RotationData {
 	vec4 rotatedSize;
 	vec4 minBounds;
 	mat4 transform;
-	//uint32 voxelCount = 0;
 };
 
 struct VoxScene {
@@ -45,7 +46,8 @@ struct VoxScene {
 	void render(mat4 mvp, float currentFrame);
 	void cleanup();
 
-	uint32 createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, ComputeShader& compute, ivec3& rotatedSize, float64& dispatchDuration);
+	void createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, uint32& rotatedModelSSBO, ComputeShader& compute, ivec3& rotatedSize, float64& dispatchDuration);
+	uint8* createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instanceIdx, ivec3& rotatedModelSize, float64& dispatchDuration);
 
 	std::vector<VoxInstance> instances;
 

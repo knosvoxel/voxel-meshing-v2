@@ -1,10 +1,10 @@
 #include "application.h"
 
-#ifndef _DEBUG
-
-#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
-
-#endif
+//#ifndef _DEBUG
+//
+//#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+//
+//#endif
 
 int main() {
 	Application app;
