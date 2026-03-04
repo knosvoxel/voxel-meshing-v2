@@ -46,7 +46,9 @@ void main() {
     // subtract min_bounds
     rotated_pos.xyz -= rotation_data.min_bounds.xyz;
 
-    uint new_index = uint(rotated_pos.x + (rotated_pos.y * rotation_data.rotated_size.x) + (rotated_pos.z * rotation_data.rotated_size.x * rotation_data.rotated_size.y));
+    vec3 swizzled_pos = rotated_pos.yzx;
+
+    uint new_index = uint(swizzled_pos.x + (swizzled_pos.y * rotation_data.rotated_size.x) + (swizzled_pos.z * rotation_data.rotated_size.x * rotation_data.rotated_size.y));
 
     uint target_voxel_data = new_index >> 2;
     uint shift_new = (new_index & 3) << 3;

@@ -141,7 +141,7 @@ void VoxScene::load(const char* path)
 		//voxelCount += count_solid_voxels_in_model(currModel);
 
 		ogt_vox_transform transform = ogt_vox_sample_instance_transform(currInstance, 0, voxScene);
-		vec4 instanceOffset = vec4(transform.m30, transform.m31, transform.m32, 0);
+		vec4 instanceOffset = vec4(transform.m31, transform.m32, transform.m30, 0); // swizzle offset into OpenGL coordinate space
 
 		ivec3 rotatedModelSize;
 		float64 rotationDuration = 0.0;
@@ -279,6 +279,7 @@ void VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 insta
 	}
 
 	rotatedModelSize = ivec3(maxBounds - minBounds) + ivec3(1); // +1 since voxel grids are inclusive
+	rotatedModelSize = ivec3(rotatedModelSize.y, rotatedModelSize.z, rotatedModelSize.x); // swizzle size into correct coordinate space
 
 	// apply_rotations_compute
 	const uint8* voxelData = model->voxel_data;
@@ -368,6 +369,7 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 	}
 
 	rotatedModelSize = ivec3(maxBounds - minBounds) + ivec3(1);
+	rotatedModelSize = ivec3(rotatedModelSize.y, rotatedModelSize.z, rotatedModelSize.x);
 
 	size_t numVoxels = (size_t)rotatedModelSize.x * rotatedModelSize.y * rotatedModelSize.z;
 	uint8* outData = (uint8*)calloc(numVoxels, sizeof(uint8));
@@ -389,6 +391,7 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 				// Apply transform
 				vec4 rotatedPos = floor(transformMat * vec4((float32)x, (float32)y, (float32)z, 1.0f));
 				ivec3 finalPos = ivec3(vec3(rotatedPos.x, rotatedPos.y, rotatedPos.z) - minBounds);
+				finalPos = ivec3(finalPos.y, finalPos.z, finalPos.x);
 
 				// Bounds check
 				if (finalPos.x >= 0 && finalPos.x < rotatedModelSize.x &&
