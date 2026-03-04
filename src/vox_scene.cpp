@@ -170,7 +170,10 @@ void VoxScene::load(const char* path)
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
 		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, instanceData, measurements);
-		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK?
+#ifdef ROTATE_CPU
+		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK? Funktioniert aktuell auch nur auf CPU
+#endif // !ROTATE_CPU
+
 		local.start();
 		dispatchPreTotal += measurements.dispatchPre;
 		dispatchPostTotal += measurements.dispatchPost;
