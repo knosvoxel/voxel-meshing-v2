@@ -1,7 +1,5 @@
 #include "vox_scene.h"
 
-#define ROTATE_CPU
-
 static inline mat4 compute_transform_mat(const mat4 transform, const vec3& pivot) {
 	static const mat4 shift_matrix = translate(mat4(1.0f), vec3(0.5f));
 	const mat4 pivot_matrix = translate(mat4(1.0f), -pivot);
@@ -41,13 +39,6 @@ void VoxScene::load(const char* path)
 	timerTotal.start();
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
-	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
-	meshingShaders.meshingComputeX = ComputeShader("../../shader/slicing_x.comp");
-	meshingShaders.meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
-	meshingShaders.meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
-
-	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
-
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
 	if (!voxScene) 
 	{
@@ -78,7 +69,6 @@ void VoxScene::load(const char* path)
 	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s\n" << std::endl;
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
-	auto meshingSSBOStart = timerTotal.elapsedMilliseconds();
 
 	// staging buffer size calculation based on which model is the biggest in the scene
 	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
@@ -95,28 +85,26 @@ void VoxScene::load(const char* path)
 		if (currSize > maxSize) maxSize = currSize;
 	}
 
-	auto meshingSSBOEnd = timerTotal.elapsedMilliseconds();
-	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms\n" << std::endl;
-
-	// create temporary worst case buffer
-	glCreateBuffers(1, &buffers.meshingSSBO_V);
-	glCreateBuffers(1, &buffers.meshingSSBO_I);
-	glCreateBuffers(1, &buffers.meshingSSBO_P);
-
 	// 24 vertices per voxel max, 4 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4,
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
-	// 36 indices per voxel max, 6 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_I, maxSize * sizeof(uint32) * 6 * 6,
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
-	// 6 packed_data per voxel max, 1 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_P, maxSize * sizeof(uint32) * 6 * 1,
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
+	const uint32 maxVertices = maxSize * 6 * 4;
+	const uint32 maxIndices = maxSize * 6 * 6;
+	const uint32 maxFaces = maxSize * 6;
+
+	std::vector<Vertex> stagingVertices(maxVertices);
+	std::vector<uint32> stagingIndices(maxIndices);
+	std::vector<uint32> stagingPacked(maxFaces);
+	DrawElementsIndirectCommand stagingIndirect{};
+
+	MeshBuffers buffer;
+	buffer.vertices = stagingVertices.data();
+	buffer.indices = stagingIndices.data();
+	buffer.packedData = stagingPacked.data();
+	buffer.indirectCommand = &stagingIndirect;
 
 	// DEBUG INFORMATION //
-	uint64_t totalSizeX = 0;
-	uint64_t totalSizeY = 0;
-	uint64_t totalSizeZ = 0;
+	uint64 totalSizeX = 0;
+	uint64 totalSizeY = 0;
+	uint64 totalSizeZ = 0;
 
 	float64 dispatchPreTotal = 0.0;
 	float64 dispatchPostTotal = 0.0;
@@ -151,13 +139,9 @@ void VoxScene::load(const char* path)
 		// created rotated model with CPU or GPU
 		// CPU is more similar to ray marching version
 		uint32 rotatedModelSSBO = 0;
-#ifdef ROTATE_CPU
 		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
 		glCreateBuffers(1, &rotatedModelSSBO);
 		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x* rotatedModelSize.y* rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
-#else
-		createRotatedModelBuffer(voxScene, i, rotatedModelSSBO, applyRotationsCompute, rotatedModelSize, rotationDuration);
-#endif
 
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
 		rotationComputeDurationTotal += rotationDuration;
@@ -169,10 +153,8 @@ void VoxScene::load(const char* path)
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, instanceData, measurements);
-#ifdef ROTATE_CPU
+		instances.back().generateMesh(rotatedModelData, buffer, instanceData, measurements);
 		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK? Funktioniert aktuell auch nur auf CPU
-#endif // !ROTATE_CPU
 
 		local.start();
 		dispatchPreTotal += measurements.dispatchPre;
@@ -217,10 +199,6 @@ void VoxScene::load(const char* path)
 
 	ogt_vox_destroy_scene(voxScene);
 
-	glDeleteBuffers(1, &buffers.meshingSSBO_V);
-	glDeleteBuffers(1, &buffers.meshingSSBO_I);
-	glDeleteBuffers(1, &buffers.meshingSSBO_P);
-
 	timerTotal.stop();
 
 	std::cout << "Scene creation total: " << timerTotal.elapsedSeconds() << " s" << std::endl;
@@ -248,98 +226,6 @@ void VoxScene::cleanup()
 	}
 
 	glDeleteTextures(1, &palette);
-}
-
-void VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, uint32& rotatedModelSSBO, ComputeShader& compute, ivec3& rotatedModelSize, float64& dispatchDuration)
-{
-	const ogt_vox_instance& instance = scene->instances[instanceIdx];
-	const ogt_vox_model* model = scene->models[instance.model_index];
-	mat4& transformMat = ogtTransformToGLM(scene, instance, model);
-
-	vec3 corners[8] = {
-		{0, 0, 0},
-		{model->size_x - 1, 0, 0},
-		{0, model->size_y - 1, 0},
-		{0, 0, model->size_z - 1},
-		{model->size_x - 1, model->size_y - 1, 0},
-		{model->size_x - 1, 0, model->size_z - 1},
-		{0, model->size_y - 1, model->size_z - 1},
-		{model->size_x - 1, model->size_y - 1, model->size_z - 1},
-	};
-
-	// transform each corner of bouding box individually
-	vec3 minBounds(FLT_MAX);
-	vec3 maxBounds(-FLT_MAX);
-
-	for (int i = 0; i < 8; ++i) {
-		vec4 transformedCorner = transformMat * vec4(corners[i], 1.0f);
-		vec3 flooredCorner = floor(vec3(transformedCorner));
-		minBounds = min(minBounds, flooredCorner);
-		maxBounds = max(maxBounds, flooredCorner);
-	}
-
-	rotatedModelSize = ivec3(maxBounds - minBounds) + ivec3(1); // +1 since voxel grids are inclusive
-	rotatedModelSize = ivec3(rotatedModelSize.y, rotatedModelSize.z, rotatedModelSize.x); // swizzle size into correct coordinate space
-
-	// apply_rotations_compute
-	const uint8* voxelData = model->voxel_data;
-
-	uint32 instanceTempSSBO;
-	glCreateBuffers(1, &instanceTempSSBO);
-	glCreateBuffers(1, &rotatedModelSSBO);
-
-	glNamedBufferStorage(instanceTempSSBO, sizeof(uint8_t) * model->size_x * model->size_y * model->size_z, voxelData, GL_DYNAMIC_STORAGE_BIT);
-	glNamedBufferStorage(rotatedModelSSBO, sizeof(uint8_t) * model->size_x * model->size_y * model->size_z, nullptr, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
-	glClearNamedBufferData(rotatedModelSSBO, GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr); // all values are initially 0. 0 = empty voxel
-
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, instanceTempSSBO);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, rotatedModelSSBO);
-
-	RotationData rotationData{};
-	rotationData.instanceSize = vec4(model->size_x, model->size_y, model->size_z, 1.0);
-	rotationData.rotatedSize = vec4(rotatedModelSize, 1.0);
-	rotationData.minBounds = vec4(minBounds, 1.0);
-	rotationData.transform = transformMat;
-
-	uint32 rotationDataUBO;
-	glCreateBuffers(1, &rotationDataUBO);
-
-	glNamedBufferStorage(rotationDataUBO, sizeof(RotationData), &rotationData, GL_DYNAMIC_STORAGE_BIT);
-
-	glBindBufferBase(GL_UNIFORM_BUFFER, 2, rotationDataUBO);
-
-	compute.use();
-
-	uint32 rotationQuery;
-	glGenQueries(1, &rotationQuery);
-	glBeginQuery(GL_TIME_ELAPSED, rotationQuery);
-
-	uint32 dispatchSizeX = (model->size_x + 15) / 16;
-	uint32 dispatchSizeY = (model->size_y + 15) / 16;
-
-	// apply_rotations_compute
-	glDispatchCompute(dispatchSizeX, dispatchSizeY, model->size_z);
-
-	glEndQuery(GL_TIME_ELAPSED);
-
-	glMemoryBarrier(
-		GL_SHADER_STORAGE_BARRIER_BIT
-	);
-
-	int32 available = 0;
-	while (!available) {
-		glGetQueryObjectiv(rotationQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-	}
-
-	uint64 elapsedGPU;
-	glGetQueryObjectui64v(rotationQuery, GL_QUERY_RESULT, &elapsedGPU);
-	// dispatch time in us
-	dispatchDuration = elapsedGPU / 1000;
-
-	glDeleteQueries(1, &rotationQuery);
-
-	glDeleteBuffers(1, &instanceTempSSBO);
-	glDeleteBuffers(1, &rotationDataUBO);
 }
 
 uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instanceIdx, ivec3& rotatedModelSize, float64& dispatchDuration)

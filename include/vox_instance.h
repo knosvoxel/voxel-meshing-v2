@@ -1,27 +1,17 @@
 #pragma once
 
+#include <omp.h>
+#include <atomic>
+
 #include "ogt_wrapper.h"
 #include "compute.h"
+#include "timer.h"
 
 using namespace glm;
 
 typedef struct InstanceData {
 	vec3 modelSize;
-	uint32 _pad1 = 0;
 	vec3 worldOffset;
-	uint32 _pad2 = 0;
-};
-
-typedef struct MeshingBuffers {
-	uint32 meshingSSBO_V;
-	uint32 meshingSSBO_I;
-	uint32 meshingSSBO_P;
-};
-
-typedef struct MeshingShaders {
-	ComputeShader meshingComputeX;
-	ComputeShader meshingComputeY;
-	ComputeShader meshingComputeZ;
 };
 
 typedef struct MeasurementData {
@@ -43,6 +33,13 @@ typedef struct DrawElementsIndirectCommand {
 	uint32 firstIndex;
 	int32 baseVertex;
 	uint32 baseInstance;
+};
+
+struct MeshBuffers {
+	Vertex* vertices;
+	uint32* indices;
+	uint32* packedData;
+	DrawElementsIndirectCommand* indirectCommand;
 };
 
 struct VoxInstance {
@@ -78,7 +75,11 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, InstanceData& instanceData, MeasurementData& measurements);
+	void sliceX(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
+	void sliceY(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
+	void sliceZ(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
+
+	void generateMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements);
 
 	void render();
 

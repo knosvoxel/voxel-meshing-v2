@@ -33,8 +33,6 @@ struct VoxScene {
 			palette = other.palette;
 			shader = std::move(other.shader);
 			applyRotationsCompute = std::move(other.applyRotationsCompute);
-			buffers = other.buffers;
-			meshingShaders = std::move(other.meshingShaders);
 
 			// Leave the other object in a valid state
 			other.palette = 0;
@@ -46,19 +44,16 @@ struct VoxScene {
 	void render(mat4 mvp, float currentFrame);
 	void cleanup();
 
-	void createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, uint32& rotatedModelSSBO, ComputeShader& compute, ivec3& rotatedSize, float64& dispatchDuration);
 	uint8* createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instanceIdx, ivec3& rotatedModelSize, float64& dispatchDuration);
 
 	std::vector<VoxInstance> instances;
 
-	MeshingBuffers buffers;
 	uint32 palette = 0, numInstances = 0;
 
 	float64 total_draw_call_duration = 0.0;
 	
 	MeasurementData measurements;
 
-	MeshingShaders meshingShaders;
 	Shader shader;
 	ComputeShader applyRotationsCompute;
 };

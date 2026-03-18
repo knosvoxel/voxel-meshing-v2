@@ -1,97 +1,327 @@
 #include "vox_instance.h"
 
-#include "timer.h"
+static inline uint8 getVoxel(const uint8* voxels, uint32 x, uint32 y, uint32 z, const ivec3& size) 
+{
+    return voxels[x + y * size.x + z * size.x * size.y];
+}
 
-void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, InstanceData& instanceData, MeasurementData& measurements)
+static void createFaceX(const vec3& start, const vec3& end, uint32 color, uint32 normal_idx, MeshBuffers& buffer, std::atomic<uint32>& counter) 
+{
+    float32 face_length = end.x - start.x;
+
+    uint32 base_idx = counter.fetch_add(6, std::memory_order_relaxed);
+    uint32 face_idx = base_idx / 6;
+    uint32 base_vtx = face_idx * 4;
+
+    buffer.packedData[face_idx] = (color & 255) | (normal_idx << 8);
+
+    float32 z_offset = (normal_idx == 3) ? 1.0f : 0.0f;
+    vec3 base = start + vec3(0.0f, 0.0f, z_offset);
+
+    vec3 pos0 = base;
+    vec3 pos1 = base + vec3(0.0f, 1.0f, 0.0f);
+    vec3 pos2 = base + vec3(1.0f + face_length, 1.0f, 0.0f);
+    vec3 pos3 = base + vec3(1.0f + face_length, 0.0f, 0.0f);
+
+    buffer.vertices[base_vtx + 0] = { detail::toFloat16(pos0.x), detail::toFloat16(pos0.y) , detail::toFloat16(pos0.z) };
+    buffer.vertices[base_vtx + 1] = { detail::toFloat16(pos1.x), detail::toFloat16(pos1.y) , detail::toFloat16(pos1.z) };
+    buffer.vertices[base_vtx + 2] = { detail::toFloat16(pos2.x), detail::toFloat16(pos2.y) , detail::toFloat16(pos2.z) };
+    buffer.vertices[base_vtx + 3] = { detail::toFloat16(pos3.x), detail::toFloat16(pos3.y) , detail::toFloat16(pos3.z) };
+
+    if (normal_idx == 3) {
+        buffer.indices[base_idx + 0] = base_vtx + 0;
+        buffer.indices[base_idx + 1] = base_vtx + 2;
+        buffer.indices[base_idx + 2] = base_vtx + 3;
+        buffer.indices[base_idx + 3] = base_vtx + 0;
+        buffer.indices[base_idx + 4] = base_vtx + 1;
+        buffer.indices[base_idx + 5] = base_vtx + 2;
+    }
+    else {
+        buffer.indices[base_idx + 0] = base_vtx + 0;
+        buffer.indices[base_idx + 1] = base_vtx + 2;
+        buffer.indices[base_idx + 2] = base_vtx + 1;
+        buffer.indices[base_idx + 3] = base_vtx + 0;
+        buffer.indices[base_idx + 4] = base_vtx + 3;
+        buffer.indices[base_idx + 5] = base_vtx + 2;
+    }
+}
+
+static void createFaceY(const vec3& start, const vec3& end, uint32 color, uint32 normal_idx, MeshBuffers& buffer, std::atomic<uint32>& counter)
+{
+    float32 face_length = end.y - start.y;
+
+    uint32 base_idx = counter.fetch_add(6, std::memory_order_relaxed);
+    uint32 face_idx = base_idx / 6;
+    uint32 base_vtx = face_idx * 4;
+
+    buffer.packedData[face_idx] = (color & 255) | (normal_idx << 8);
+
+    float32 x_offset = (normal_idx == 1) ? 1.0f : 0.0f;
+    vec3 base = start + vec3(x_offset, 0.0f, 0.0f);
+
+    vec3 pos0 = base;
+    vec3 pos1 = base + vec3(0.0f, 1.0f + face_length, 0.0f);
+    vec3 pos2 = base + vec3(0.0f, 1.0f + face_length, 1.0f);
+    vec3 pos3 = base + vec3(0.0f, 0.0f, 1.0f);
+
+    buffer.vertices[base_vtx + 0] = { detail::toFloat16(pos0.x), detail::toFloat16(pos0.y) , detail::toFloat16(pos0.z) };
+    buffer.vertices[base_vtx + 1] = { detail::toFloat16(pos1.x), detail::toFloat16(pos1.y) , detail::toFloat16(pos1.z) };
+    buffer.vertices[base_vtx + 2] = { detail::toFloat16(pos2.x), detail::toFloat16(pos2.y) , detail::toFloat16(pos2.z) };
+    buffer.vertices[base_vtx + 3] = { detail::toFloat16(pos3.x), detail::toFloat16(pos3.y) , detail::toFloat16(pos3.z) };
+
+    if (normal_idx == 1) {
+        buffer.indices[base_idx + 0] = base_vtx + 0;
+        buffer.indices[base_idx + 1] = base_vtx + 2;
+        buffer.indices[base_idx + 2] = base_vtx + 1;
+        buffer.indices[base_idx + 3] = base_vtx + 0;
+        buffer.indices[base_idx + 4] = base_vtx + 3;
+        buffer.indices[base_idx + 5] = base_vtx + 2;
+    }
+    else {
+        buffer.indices[base_idx + 0] = base_vtx + 0;
+        buffer.indices[base_idx + 1] = base_vtx + 2;
+        buffer.indices[base_idx + 2] = base_vtx + 3;
+        buffer.indices[base_idx + 3] = base_vtx + 0;
+        buffer.indices[base_idx + 4] = base_vtx + 1;
+        buffer.indices[base_idx + 5] = base_vtx + 2;
+    }
+}
+
+static void createFaceZ(const vec3& start, const vec3& end, uint32 color, uint32 normal_idx, MeshBuffers& buffer, std::atomic<uint32>& counter)
+{
+    float32 face_length = end.z - start.z;
+
+    uint32 base_idx = counter.fetch_add(6, std::memory_order_relaxed);
+    uint32 face_idx = base_idx / 6;
+    uint32 base_vtx = face_idx * 4;
+
+    buffer.packedData[face_idx] = (color & 255) | (normal_idx << 8);
+
+    float32 y_offset = (normal_idx == 5) ? 1.0f : 0.0f;
+    vec3 base = start + vec3(0.0f, y_offset, 0.0f);
+
+    vec3 pos0 = base;
+    vec3 pos1 = base + vec3(1.0f, 0.0f, 0.0f);
+    vec3 pos2 = base + vec3(1.0f, 0.0f, 1.0f + face_length);
+    vec3 pos3 = base + vec3(0.0f, 0.0f, 1.0f + face_length);
+
+    buffer.vertices[base_vtx + 0] = { detail::toFloat16(pos0.x), detail::toFloat16(pos0.y) , detail::toFloat16(pos0.z) };
+    buffer.vertices[base_vtx + 1] = { detail::toFloat16(pos1.x), detail::toFloat16(pos1.y) , detail::toFloat16(pos1.z) };
+    buffer.vertices[base_vtx + 2] = { detail::toFloat16(pos2.x), detail::toFloat16(pos2.y) , detail::toFloat16(pos2.z) };
+    buffer.vertices[base_vtx + 3] = { detail::toFloat16(pos3.x), detail::toFloat16(pos3.y) , detail::toFloat16(pos3.z) };
+
+    if (normal_idx == 5) {
+        buffer.indices[base_idx + 0] = base_vtx + 0;
+        buffer.indices[base_idx + 1] = base_vtx + 2;
+        buffer.indices[base_idx + 2] = base_vtx + 3;
+        buffer.indices[base_idx + 3] = base_vtx + 0;
+        buffer.indices[base_idx + 4] = base_vtx + 1;
+        buffer.indices[base_idx + 5] = base_vtx + 2;
+    }
+    else {
+        buffer.indices[base_idx + 0] = base_vtx + 0;
+        buffer.indices[base_idx + 1] = base_vtx + 2;
+        buffer.indices[base_idx + 2] = base_vtx + 1;
+        buffer.indices[base_idx + 3] = base_vtx + 0;
+        buffer.indices[base_idx + 4] = base_vtx + 3;
+        buffer.indices[base_idx + 5] = base_vtx + 2;
+    }
+}
+
+void VoxInstance::sliceX(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter)
+{
+    const ivec3 size = ivec3(instanceData.modelSize);
+    const vec3 origin = instanceData.worldOffset - vec3(floor(instanceData.modelSize * 0.5f));
+
+#pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int32 iy = 0; iy < size.y; ++iy)
+    {
+        for (int32 iz = 0; iz < size.z; ++iz)
+        {
+            vec3 strip_base = origin + vec3(0.0f, float32(iy), float32(iz));
+
+            uint32 prev_col_neg = 0, prev_col_pos = 0;
+            vec3 start_neg{}, start_pos{};
+
+            for (int32 ix = 0; ix < size.x; ++ix)
+            {
+                uint8 curr = getVoxel(voxels, ix, iy, iz, size);
+
+                uint32 col_neg = 0, col_pos = 0;
+                if (curr) {
+                    if (iz == 0 || !getVoxel(voxels, ix, iy, iz - 1, size)) col_neg = curr;
+                    if (iz == size.z - 1 || !getVoxel(voxels, ix, iy, iz + 1, size)) col_pos = curr;
+                }
+
+                vec3 current_pos = strip_base + vec3(float32(ix), 0.0f, 0.0f);
+
+                if (col_neg != prev_col_neg) {
+                    if (prev_col_neg) createFaceX(start_neg, current_pos - vec3(1, 0, 0), prev_col_neg, 2, buffer, counter);
+                    if (col_neg) start_neg = current_pos;
+                    prev_col_neg = col_neg;
+                }
+
+                if (col_pos != prev_col_pos) {
+                    if (prev_col_pos) createFaceX(start_pos, current_pos - vec3(1, 0, 0), prev_col_pos, 3, buffer, counter);
+                    if (col_pos) start_pos = current_pos;
+                    prev_col_pos = col_pos;
+                }
+            }
+
+            vec3 end_pos = strip_base + vec3(float32(size.x - 1), 0.0f, 0.0f);
+            if (prev_col_neg) createFaceX(start_neg, end_pos, prev_col_neg, 2, buffer, counter);
+            if (prev_col_pos) createFaceX(start_pos, end_pos, prev_col_pos, 3, buffer, counter);
+        }
+    }
+}
+
+void VoxInstance::sliceY(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter)
+{
+    const ivec3 size = ivec3(instanceData.modelSize);
+    const vec3 origin = instanceData.worldOffset - vec3(floor(instanceData.modelSize * 0.5f));
+
+#pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int32 ix = 0; ix < size.x; ++ix)
+    {
+        for (int32 iz = 0; iz < size.z; ++iz)
+        {
+            vec3 strip_base = origin + vec3(float32(ix), 0.0f, float32(iz));
+
+            uint32 prev_col_neg = 0, prev_col_pos = 0;
+            vec3 start_neg{}, start_pos{};
+
+            for (int32 iy = 0; iy < size.y; ++iy)
+            {
+                uint8 curr = getVoxel(voxels, ix, iy, iz, size);
+
+                uint32 col_neg = 0, col_pos = 0;
+                if (curr) {
+                    if (ix == 0 || !getVoxel(voxels, ix - 1, iy, iz, size)) col_neg = curr;
+                    if (ix == size.x - 1 || !getVoxel(voxels, ix + 1, iy, iz, size)) col_pos = curr;
+                }
+
+                vec3 current_pos = strip_base + vec3(0.0f, float32(iy), 0.0f);
+
+                if (col_neg != prev_col_neg) {
+                    if (prev_col_neg) createFaceY(start_neg, current_pos - vec3(0, 1, 0), prev_col_neg, 0, buffer, counter);
+                    if (col_neg) start_neg = current_pos;
+                    prev_col_neg = col_neg;
+                }
+
+                if (col_pos != prev_col_pos) {
+                    if (prev_col_pos) createFaceY(start_pos, current_pos - vec3(0, 1, 0), prev_col_pos, 1, buffer, counter);
+                    if (col_pos) start_pos = current_pos;
+                    prev_col_pos = col_pos;
+                }
+            }
+
+            vec3 end_pos = strip_base + vec3(0.0f, float32(size.y - 1), 0.0f);
+            if (prev_col_neg) createFaceY(start_neg, end_pos, prev_col_neg, 0, buffer, counter);
+            if (prev_col_pos) createFaceY(start_pos, end_pos, prev_col_pos, 1, buffer, counter);
+        }
+    }
+}
+
+void VoxInstance::sliceZ(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter)
+{
+    const ivec3 size = ivec3(instanceData.modelSize);
+    const vec3 origin = instanceData.worldOffset - vec3(floor(instanceData.modelSize * 0.5f));
+
+#pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int32 ix = 0; ix < size.x; ++ix)
+    {
+        for (int32 iy = 0; iy < size.y; ++iy)
+        {
+            vec3 strip_base = origin + vec3(float32(ix), float32(iy), 0.0f);
+
+            uint32 prev_col_neg = 0, prev_col_pos = 0;
+            vec3 start_neg{}, start_pos{};
+
+            for (int32 iz = 0; iz < size.z; ++iz)
+            {
+                uint8 curr = getVoxel(voxels, ix, iy, iz, size);
+
+                uint32 col_neg = 0, col_pos = 0;
+                if (curr) {
+                    if (iy == 0 || !getVoxel(voxels, ix, iy - 1, iz, size)) col_neg = curr;
+                    if (iy == size.y - 1 || !getVoxel(voxels, ix, iy + 1, iz, size)) col_pos = curr;
+                }
+
+                vec3 current_pos = strip_base + vec3(0.0f, 0.0f, float32(iz));
+
+                if (col_neg != prev_col_neg) {
+                    if (prev_col_neg) createFaceZ(start_neg, current_pos - vec3(0, 0, 1), prev_col_neg, 4, buffer, counter);
+                    if (col_neg) start_neg = current_pos;
+                    prev_col_neg = col_neg;
+                }
+
+                if (col_pos != prev_col_pos) {
+                    if (prev_col_pos) createFaceZ(start_pos, current_pos - vec3(0, 0, 1), prev_col_pos, 5, buffer, counter);
+                    if (col_pos) start_pos = current_pos;
+                    prev_col_pos = col_pos;
+                }
+            }
+
+            vec3 end_pos = strip_base + vec3(0.0f, 0.0f, float32(size.z - 1));
+            if (prev_col_neg) createFaceZ(start_neg, end_pos, prev_col_neg, 4, buffer, counter);
+            if (prev_col_pos) createFaceZ(start_pos, end_pos, prev_col_pos, 5, buffer, counter);
+        }
+    }
+}
+
+void VoxInstance::generateMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements)
 {
     Timer timer;
     timer.start();
 
-    rotatedModelSSBO = modelSSBO;
+    buffer.indirectCommand->count = 0;
+    buffer.indirectCommand->instanceCount = 1;
+    buffer.indirectCommand->firstIndex = 0;
+    buffer.indirectCommand->baseVertex = 0;
+    buffer.indirectCommand->baseInstance = 0;
 
-    DrawElementsIndirectCommand indirectData{};
-    indirectData.count = 0;
-    indirectData.instanceCount = 1;
-    indirectData.firstIndex = 0;
-    indirectData.baseVertex = 0;
-    indirectData.baseInstance = 0;
-
-    glCreateBuffers(1, &indirectCommand);
-
-    glNamedBufferStorage(indirectCommand, sizeof(DrawElementsIndirectCommand), &indirectData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
-
-    //compute shader call
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, modelSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buffers.meshingSSBO_V); // temp buffer vertices
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, buffers.meshingSSBO_I); // temp buffer indices
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, buffers.meshingSSBO_P); // temp buffer packedData: Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, indirectCommand);
-
-    glCreateBuffers(1, &instanceDataBuffer);
-    glNamedBufferStorage(instanceDataBuffer, sizeof(InstanceData), &instanceData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 5, instanceDataBuffer);
+    std::atomic<uint32> faceCounter{ 0 };
 
 
-    uint32 meshingQuery;
-    glGenQueries(1, &meshingQuery);
-    glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
-
-    roundedSizeX = (instanceData.modelSize.x + 15) / 16;
-    roundedSizeY = (instanceData.modelSize.y + 15) / 16;
-    roundedSizeZ = (instanceData.modelSize.z + 15) / 16;
     timer.stop();
     measurements.dispatchPre = timer.elapsedMilliseconds();
 
-    shaders.meshingComputeX.use();
-    glDispatchCompute(roundedSizeY, roundedSizeZ, 1);
 
-    shaders.meshingComputeY.use();
-    glDispatchCompute(roundedSizeX, roundedSizeZ, 1);
-
-    shaders.meshingComputeZ.use();
-    glDispatchCompute(roundedSizeX, roundedSizeY, 1);
-
-    glEndQuery(GL_TIME_ELAPSED);
-
-    glMemoryBarrier(
-        GL_SHADER_STORAGE_BARRIER_BIT |
-        GL_COMMAND_BARRIER_BIT
-    );
     timer.start();
-    DrawElementsIndirectCommand commandData;
-    glGetNamedBufferSubData(indirectCommand, 0, sizeof(DrawElementsIndirectCommand), &commandData);
-    uint32 indexCount = commandData.count;
-    uint32 vertexCount = (indexCount / 6) * 4;
-    uint32 faceCount = indexCount / 6;
+    sliceX(voxelData, instanceData, buffer, faceCounter);
+    sliceY(voxelData, instanceData, buffer, faceCounter);
+    sliceZ(voxelData, instanceData, buffer, faceCounter);
+    timer.stop();
+
+    measurements.meshGenerationDuration = timer.elapsedMilliseconds() / 1000.0;
+
+    uint32 indexCount = faceCounter.load() * 6;
+    uint32 vertexCount = faceCounter.load() * 4;
+    uint32 faceCount = faceCounter.load();
+
+    buffer.indirectCommand->count = indexCount;
 
     measurements.vertexCount += vertexCount;
     measurements.indexCount += indexCount;
     measurements.packedDataCount += faceCount;
 
-    int32 available = 0;
-    while (!available) {
-        glGetQueryObjectiv(meshingQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-    }
-
-    uint64 elapsedGPU = 0;
-    glGetQueryObjectui64v(meshingQuery, GL_QUERY_RESULT, &elapsedGPU);
-    // dispatch time in us
-    measurements.meshGenerationDuration = elapsedGPU / 1000;
-
-    glDeleteQueries(1, &meshingQuery);
+    timer.start();
 
     if (vertexCount > 0) {
         glCreateBuffers(1, &vertexSSBO);
         glNamedBufferStorage(vertexSSBO, sizeof(Vertex) * vertexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_V, vertexSSBO, 0, 0, sizeof(Vertex) * vertexCount);
+        glNamedBufferSubData(vertexSSBO, 0, sizeof(Vertex) * vertexCount, buffer.vertices);
 
         glCreateBuffers(1, &packedSSBO);
         glNamedBufferStorage(packedSSBO, sizeof(uint32) * faceCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_P, packedSSBO, 0, 0, sizeof(uint32) * faceCount);
+        glNamedBufferSubData(packedSSBO, 0, sizeof(uint32) * faceCount, buffer.packedData);
 
         glCreateBuffers(1, &ibo);
         glNamedBufferStorage(ibo, sizeof(uint32) * indexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_I, ibo, 0, 0, sizeof(uint32) * indexCount);
+        glNamedBufferSubData(ibo, 0, sizeof(uint32) * indexCount, buffer.indices);
+
+        glCreateBuffers(1, &indirectCommand);
+        glNamedBufferStorage(indirectCommand, sizeof(DrawElementsIndirectCommand), buffer.indirectCommand, GL_DYNAMIC_STORAGE_BIT);
 
         glCreateVertexArrays(1, &vao);
         glVertexArrayElementBuffer(vao, ibo);
@@ -101,6 +331,7 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
         vertexSSBO = 0;
         packedSSBO = 0;
         ibo = 0;
+        indirectCommand = 0;
     }
     timer.stop();
     measurements.dispatchPost = timer.elapsedMilliseconds();
