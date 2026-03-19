@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ext/matrix_transform.hpp>
+
 #include "ogt_wrapper.h"
 #include "compute.h"
 
@@ -7,9 +9,7 @@ using namespace glm;
 
 typedef struct InstanceData {
 	vec3 modelSize;
-	uint32 _pad1 = 0;
 	vec3 worldOffset;
-	uint32 _pad2 = 0;
 };
 
 typedef struct MeshingBuffers {
@@ -78,13 +78,16 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, InstanceData& instanceData, MeasurementData& measurements);
+	void generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, vec3 modelSize, vec3 worldOffset, MeasurementData& measurements);
 
 	void render();
 
 	void cleanup();
 
 	uint8* voxelData;
+
+	vec3 model_size;
+	mat4 transform;
 
 	uint32 //vbo = 0, 
 		vao = 0, 

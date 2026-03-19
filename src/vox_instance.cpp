@@ -2,10 +2,13 @@
 
 #include "timer.h"
 
-void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, InstanceData& instanceData, MeasurementData& measurements)
+void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, MeshingShaders& shaders, vec3 modelSize, vec3 worldOffset, MeasurementData& measurements)
 {
     Timer timer;
     timer.start();
+
+    model_size = modelSize;
+    transform = translate(mat4(1.0f), worldOffset - vec3(floor(model_size.x / 2.0), floor(model_size.y / 2.0), floor(model_size.z / 2.0)));
 
     rotatedModelSSBO = modelSSBO;
 
@@ -27,28 +30,26 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, buffers.meshingSSBO_P); // temp buffer packedData: Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, indirectCommand);
 
-    glCreateBuffers(1, &instanceDataBuffer);
-    glNamedBufferStorage(instanceDataBuffer, sizeof(InstanceData), &instanceData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 5, instanceDataBuffer);
-
-
     uint32 meshingQuery;
     glGenQueries(1, &meshingQuery);
     glBeginQuery(GL_TIME_ELAPSED, meshingQuery);
 
-    roundedSizeX = (instanceData.modelSize.x + 15) / 16;
-    roundedSizeY = (instanceData.modelSize.y + 15) / 16;
-    roundedSizeZ = (instanceData.modelSize.z + 15) / 16;
+    roundedSizeX = (model_size.x + 15) / 16;
+    roundedSizeY = (model_size.y + 15) / 16;
+    roundedSizeZ = (model_size.z + 15) / 16;
     timer.stop();
     measurements.dispatchPre = timer.elapsedMilliseconds();
 
     shaders.meshingComputeX.use();
+    shaders.meshingComputeX.setVec3("model_size", model_size);
     glDispatchCompute(roundedSizeY, roundedSizeZ, 1);
 
     shaders.meshingComputeY.use();
+    shaders.meshingComputeY.setVec3("model_size", model_size);
     glDispatchCompute(roundedSizeX, roundedSizeZ, 1);
 
     shaders.meshingComputeZ.use();
+    shaders.meshingComputeZ.setVec3("model_size", model_size);
     glDispatchCompute(roundedSizeX, roundedSizeY, 1);
 
     glEndQuery(GL_TIME_ELAPSED);

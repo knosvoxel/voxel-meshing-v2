@@ -141,7 +141,7 @@ void VoxScene::load(const char* path)
 		//voxelCount += count_solid_voxels_in_model(currModel);
 
 		ogt_vox_transform transform = ogt_vox_sample_instance_transform(currInstance, 0, voxScene);
-		vec4 instanceOffset = vec4(transform.m31, transform.m32, transform.m30, 0); // swizzle offset into OpenGL coordinate space
+		ivec3 instanceOffset = ivec3(transform.m31, transform.m32, transform.m30); // swizzle offset into OpenGL coordinate space
 
 		ivec3 rotatedModelSize;
 		float64 rotationDuration = 0.0;
@@ -162,14 +162,10 @@ void VoxScene::load(const char* path)
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
 		rotationComputeDurationTotal += rotationDuration;
 
-		InstanceData instanceData;
-		instanceData.modelSize = rotatedModelSize;
-		instanceData.worldOffset = instanceOffset;
-
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, instanceData, measurements);
+		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, rotatedModelSize,instanceOffset, measurements);
 #ifdef ROTATE_CPU
 		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK? Funktioniert aktuell auch nur auf CPU
 #endif // !ROTATE_CPU
@@ -233,9 +229,9 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	shader.use();
 	shader.setInt("palette", 0);
 	shader.setVec3("light_direction", -0.45f, -0.7f, -0.2f);
-	shader.setMat4("mvp", mvp);
 
 	for (VoxInstance& instance : instances) {
+		shader.setMat4("mvp", mvp * instance.transform);
 		instance.render();
 	}
 }
