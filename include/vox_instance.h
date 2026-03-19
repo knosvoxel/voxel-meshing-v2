@@ -2,12 +2,24 @@
 
 #include <omp.h>
 #include <atomic>
+#include <vector>
+#include <array>
+#include <bit>
 
 #include "ogt_wrapper.h"
 #include "compute.h"
 #include "timer.h"
 
 using namespace glm;
+
+enum FaceDirection {
+	UP,
+	DOWN,
+	LEFT,
+	RIGHT,
+	FORWARD,
+	BACK
+};
 
 typedef struct InstanceData {
 	vec3 modelSize;
@@ -40,6 +52,12 @@ struct MeshBuffers {
 	uint32* indices;
 	uint32* packedData;
 	DrawElementsIndirectCommand* indirectCommand;
+};
+
+struct GreedyQuad {
+	ivec2 start_pos;
+	uint32 width;
+	uint32 height;
 };
 
 struct VoxInstance {
@@ -78,7 +96,9 @@ struct VoxInstance {
 	void sliceX(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
 	void sliceY(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
 	void sliceZ(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-
+	
+	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
+	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData);
 	void generateMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements);
 
 	void render();
