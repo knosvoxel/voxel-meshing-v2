@@ -106,6 +106,7 @@ struct VoxInstance {
 	void cleanup();
 
 	uint8* voxelData;
+	ivec3 instanceDimensions;
 
 	uint32 //vbo = 0, 
 		vao = 0, 

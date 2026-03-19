@@ -5,6 +5,38 @@ static inline uint8 getVoxel(const uint8* voxels, uint32 x, uint32 y, uint32 z, 
     return voxels[x + y * size.x + z * size.x * size.y];
 }
 
+static inline uint8 getVoxelInNegDir(FaceDirection dir, const uint8* voxels, uint32 x, uint32 y, uint32 z, const ivec3& size)
+{
+    ivec3 offset;
+
+    switch (dir)
+    {
+    case UP:
+        offset = ivec3(0, 1, 0);
+        break;
+    case DOWN:
+        offset = ivec3(0, -1, 0);
+        break;
+    case LEFT:
+        offset = ivec3(-1, 0, 0);
+        break;
+    case RIGHT:
+        offset = ivec3(1, 0, 0);
+        break;
+    case FORWARD:
+        offset = ivec3(0, 0, -1);
+        break;
+    case BACK:
+        offset = ivec3(0, 0, 1);
+        break;
+    default:
+        offset = ivec3(-1, -1, -1);
+        break;
+    }
+
+    return getVoxel(voxels, x + offset.x, y + offset.y, z + offset.z, size);
+}
+
 std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& data)
 {
     std::vector<GreedyQuad> greedy_quads;
@@ -47,7 +79,7 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
     return greedy_quads;
 }
 
-static ivec3 world_to_sample(FaceDirection dir, int32 axis, int32 x, int32 y)
+static ivec3 worldToSample(FaceDirection dir, int32 axis, int32 x, int32 y)
 {
     switch (dir)
     {
@@ -75,24 +107,39 @@ static ivec3 world_to_sample(FaceDirection dir, int32 axis, int32 x, int32 y)
     }
 }
 
+static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color) {
+
+}
+
 std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, const uint8* voxelData)
 {
+    std::vector<uint32> vertices;
     uint32 size = 32;
     for (int32 axis = 0; axis < size; axis++)
     {
         for (int32 color = 1; color <= 255; color++) {
+            // create binary grid
             std::array<uint32, 32> x_data;
             for (int32 i = 0; i < size * size; i++)
             {
                 uint32 row = i % size;
                 uint32 column = (i / size);
-                ivec3 pos = world_to_sample(dir, axis, row, column);
+                ivec3 pos = worldToSample(dir, axis, row, column);
+                uint8 current = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
+                uint8 neg_z = getVoxelInNegDir(dir, voxelData, pos.x, pos.y, pos.z, instanceDimensions);
 
+                bool is_solid = current != 0 && neg_z == 0;
+                x_data[row] = ((1 << column) * uint32(is_solid)) | x_data[row];
+            }
+            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(x_data);
+            for (GreedyQuad quad : quads_from_axis)
+            {
+                appendVertices(vertices, dir, axis, color);
             }
         }
     }
 
-    return std::vector<uint32>();
+    return vertices;
 }
 
 void VoxInstance::generateMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements)
@@ -109,6 +156,7 @@ void VoxInstance::generateMesh(const uint8* voxelData, MeshBuffers& buffer, Inst
     timer.stop();
     measurements.dispatchPre = timer.elapsedMilliseconds();
 
+    instanceDimensions = instanceData.modelSize;
 
     timer.start();
 
