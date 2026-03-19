@@ -60,6 +60,15 @@ struct GreedyQuad {
 	uint32 height;
 };
 
+// TODO: draw elements directly
+
+struct Chunk {
+	mat4 transform;
+	std::vector<Vertex> vertices;
+	std::vector<uint32> indices;
+	std::vector<uint32> packedData;
+};
+
 struct VoxInstance {
 	VoxInstance() {};
 	~VoxInstance() {};
