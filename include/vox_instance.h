@@ -44,12 +44,12 @@ typedef struct DrawElementsIndirectCommand {
 	uint32 baseInstance;
 };
 
-struct MeshBuffers {
-	uint32* vertices;
-	uint32* indices;
-	uint32* packedData;
-	DrawElementsIndirectCommand* indirectCommand;
-};
+//struct MeshBuffers {
+//	uint32* vertices;
+//	uint32* indices;
+//	uint32* packedData;
+//	DrawElementsIndirectCommand* indirectCommand;
+//};
 
 struct GreedyQuad {
 	ivec2 start_pos;
@@ -58,6 +58,11 @@ struct GreedyQuad {
 };
 
 // TODO: draw elements directly
+
+struct Chunk {
+	mat4 localTransform;
+	std::vector<uint8> voxelData;
+};
 
 struct ChunkMesh {
 	mat4 transform;
@@ -98,14 +103,16 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void sliceX(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-	void sliceY(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-	void sliceZ(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-	
+	//void sliceX(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
+	//void sliceY(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
+	//void sliceZ(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
+	//
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
 	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData);
 	std::vector<uint32> generateIndices(size_t vertex_count);
-	void generateChunkMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements);
+	ChunkMesh generateChunkMesh(const uint8* voxelData, InstanceData& instanceData, MeasurementData& measurements);
+	std::vector<Chunk> generateChunks(const uint8* voxelData);
+	void generateMesh(const uint8* voxelData, mat4 worldTransform);
 
 	void render();
 
@@ -113,6 +120,9 @@ struct VoxInstance {
 
 	uint8* voxelData;
 	ivec3 instanceDimensions;
+
+	std::vector<Chunk> chunkData;
+	std::vector<ChunkMesh> meshes;
 
 	uint32 //vbo = 0, 
 		vao = 0, 

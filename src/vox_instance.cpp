@@ -346,6 +346,21 @@ ChunkMesh VoxInstance::generateChunkMesh(const uint8* voxelData, InstanceData& i
     measurements.dispatchPost = timer.elapsedMilliseconds();
 }
 
+std::vector<Chunk> VoxInstance::generateChunks(const uint8* voxelData)
+{
+    return std::vector<Chunk>();
+}
+
+void VoxInstance::generateMesh(const uint8* voxelData, mat4 worldTransform)
+{
+    chunkData = generateChunks(voxelData);
+
+    std::vector<ChunkMesh> meshes;
+    for (Chunk chunk : chunkData) {
+        meshes.append(generateChunkMesh());
+    }
+}
+
 void VoxInstance::render()
 {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vertexSSBO);
