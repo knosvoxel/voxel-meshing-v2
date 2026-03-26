@@ -5,6 +5,7 @@
 #include <vector>
 #include <array>
 #include <bit>
+#include <deque>
 
 #include "ogt_wrapper.h"
 #include "compute.h"
@@ -35,10 +36,6 @@ typedef struct MeasurementData {
 	uint32 packedDataCount = 0;
 };
 
-typedef struct Vertex {
-	int16 x, y, z; // mainly used for buffer size, actually float16 in compute shaders
-};
-
 typedef struct DrawElementsIndirectCommand {
 	uint32 count;
 	uint32 instanceCount;
@@ -48,7 +45,7 @@ typedef struct DrawElementsIndirectCommand {
 };
 
 struct MeshBuffers {
-	Vertex* vertices;
+	uint32* vertices;
 	uint32* indices;
 	uint32* packedData;
 	DrawElementsIndirectCommand* indirectCommand;
@@ -62,11 +59,10 @@ struct GreedyQuad {
 
 // TODO: draw elements directly
 
-struct Chunk {
+struct ChunkMesh {
 	mat4 transform;
-	std::vector<Vertex> vertices;
+	std::vector<uint32> vertices;
 	std::vector<uint32> indices;
-	std::vector<uint32> packedData;
 };
 
 struct VoxInstance {
@@ -108,7 +104,8 @@ struct VoxInstance {
 	
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
 	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData);
-	void generateMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements);
+	std::vector<uint32> generateIndices(size_t vertex_count);
+	void generateChunkMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements);
 
 	void render();
 

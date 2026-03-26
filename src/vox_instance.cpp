@@ -37,6 +37,37 @@ static inline uint8 getVoxelInNegDir(FaceDirection dir, const uint8* voxels, uin
     return getVoxel(voxels, x + offset.x, y + offset.y, z + offset.z, size);
 }
 
+static inline int32 negateAxis(FaceDirection& dir) {
+    switch (dir)
+    {
+    case UP:
+        return -1;
+        break;
+    case DOWN:
+        return 0;
+        break;
+    case LEFT:
+        return 0;
+        break;
+    case RIGHT:
+        return -1;
+        break;
+    case FORWARD:
+        return 0;
+        break;
+    case BACK:
+        return 1;
+        break;
+    default:
+        return -1;
+        break;
+    }
+}
+
+static inline uint32 makeVertex(ivec3 pos, uint32 normal, uint8 color) {
+    return uint32{ pos.x | pos.y << 6 | pos.z << 12 | normal << 18 | uint32(color) << 22 };
+}
+
 std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& data)
 {
     std::vector<GreedyQuad> greedy_quads;
@@ -107,8 +138,81 @@ static ivec3 worldToSample(FaceDirection dir, int32 axis, int32 x, int32 y)
     }
 }
 
-static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color) {
+static uint32 getNormalIndex(FaceDirection dir)
+{
+    switch (dir)
+    {
+    case UP:
+        return 0;
+        break;
+    case DOWN:
+        return 1;
+        break;
+    case LEFT:
+        return 2;
+        break;
+    case RIGHT:
+        return 3;
+        break;
+    case FORWARD:
+        return 4;
+        break;
+    case BACK:
+        return 5;
+        break;
+    default:
+        return -1;
+        break;
+    }
+}
 
+static bool isReverseOrder(FaceDirection dir) {
+    switch (dir)
+    {
+    case UP:
+        return true;
+        break;
+    case DOWN:
+        return false;
+        break;
+    case LEFT:
+        return false;
+        break;
+    case RIGHT:
+        return true;
+        break;
+    case FORWARD:
+        return true;
+        break;
+    case BACK:
+        return false;
+        break;
+    default:
+        break;
+    }
+}
+
+static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color, GreedyQuad& quad) {
+    int32 negated_axis = negateAxis(dir);
+    int32 axis = axis + negated_axis;
+
+    uint32 v1 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y), getNormalIndex(dir), color);
+    uint32 v2 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y), getNormalIndex(dir), color);
+    uint32 v3 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y + quad.height), getNormalIndex(dir), color);
+    uint32 v4 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y + quad.height), getNormalIndex(dir), color);
+
+    std::deque<uint32> new_vertices = { v1, v2, v3, v4 };
+
+    if (isReverseOrder(dir)) {
+        std::deque<uint32> tail(std::next(new_vertices.begin()), new_vertices.end());
+        std::reverse(tail.begin(), tail.end());
+        for (auto& v : tail)
+        {
+            new_vertices.push_back(v);
+        }
+    }
+
+    vertices.insert(vertices.end(), new_vertices.begin(), new_vertices.end());
 }
 
 std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, const uint8* voxelData)
@@ -134,7 +238,7 @@ std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, con
             std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(x_data);
             for (GreedyQuad quad : quads_from_axis)
             {
-                appendVertices(vertices, dir, axis, color);
+                appendVertices(vertices, dir, axis, color, quad);
             }
         }
     }
@@ -142,32 +246,43 @@ std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, con
     return vertices;
 }
 
-void VoxInstance::generateMesh(const uint8* voxelData, MeshBuffers& buffer, InstanceData& instanceData, MeasurementData& measurements)
+std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
+{
+    int32 indices_count = vertex_count / 4;
+    std::vector<uint32> indices;
+    indices.reserve(indices_count);
+    for (size_t i = 0; i < indices_count; i++)
+    {
+        uint32 vert_index = static_cast<uint32>(i) * 4u;
+        indices.push_back(vert_index);
+        indices.push_back(vert_index + 1);
+        indices.push_back(vert_index + 2);
+        indices.push_back(vert_index);
+        indices.push_back(vert_index + 2);
+        indices.push_back(vert_index + 3);
+    }
+
+    return indices;
+}
+
+ChunkMesh VoxInstance::generateChunkMesh(const uint8* voxelData, InstanceData& instanceData, MeasurementData& measurements)
 {
     Timer timer;
-    timer.start();
-
-    buffer.indirectCommand->count = 0;
-    buffer.indirectCommand->instanceCount = 1;
-    buffer.indirectCommand->firstIndex = 0;
-    buffer.indirectCommand->baseVertex = 0;
-    buffer.indirectCommand->baseInstance = 0;
-
-    timer.stop();
     measurements.dispatchPre = timer.elapsedMilliseconds();
 
     instanceDimensions = instanceData.modelSize;
 
     timer.start();
 
-    std::vector<Vertex> quads{};
+    ChunkMesh mesh{};
+    std::vector<uint32> quads{};
 
-    std::vector<Vertex> up_quads = generateVerticesFromFace(UP, voxelData);
-    std::vector<Vertex> down_quads = generateVerticesFromFace(DOWN, voxelData);
-    std::vector<Vertex> left_quads = generateVerticesFromFace(LEFT, voxelData);
-    std::vector<Vertex> right_quads = generateVerticesFromFace(RIGHT, voxelData);
-    std::vector<Vertex> forward_quads = generateVerticesFromFace(FORWARD, voxelData);
-    std::vector<Vertex> back_quads = generateVerticesFromFace(BACK, voxelData);
+    std::vector<uint32> up_quads = generateVerticesFromFace(UP, voxelData);
+    std::vector<uint32> down_quads = generateVerticesFromFace(DOWN, voxelData);
+    std::vector<uint32> left_quads = generateVerticesFromFace(LEFT, voxelData);
+    std::vector<uint32> right_quads = generateVerticesFromFace(RIGHT, voxelData);
+    std::vector<uint32> forward_quads = generateVerticesFromFace(FORWARD, voxelData);
+    std::vector<uint32> back_quads = generateVerticesFromFace(BACK, voxelData);
 
     quads.insert(quads.end(), up_quads.begin(), up_quads.end());
     quads.insert(quads.end(), down_quads.begin(), down_quads.end());
@@ -176,6 +291,15 @@ void VoxInstance::generateMesh(const uint8* voxelData, MeshBuffers& buffer, Inst
     quads.insert(quads.end(), forward_quads.begin(), forward_quads.end());
     quads.insert(quads.end(), back_quads.begin(), back_quads.end());
     
+    mesh.vertices.insert(mesh.vertices.end(), quads.begin(), quads.end());
+    if (mesh.vertices.empty()) {
+        return mesh;
+    }
+    else {
+        mesh.indices = generateIndices(mesh.vertices.size());
+        return mesh;
+    }
+
     timer.stop();
 
     measurements.meshGenerationDuration = timer.elapsedMilliseconds() / 1000.0;
