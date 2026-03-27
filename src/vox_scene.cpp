@@ -211,16 +211,16 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	shader.use();
 	shader.setInt("palette", 0);
 	shader.setVec3("light_direction", -0.45f, -0.7f, -0.2f);
-	shader.setMat4("mvp", mvp);
+	//shader.setMat4("mvp", mvp);
 
 	for (VoxInstance& instance : instances) {
-		instance.render();
+		instance.render(shader, mvp);
 	}
 }
 
 void VoxScene::cleanup()
 {
-	for (VoxInstance instance : instances)
+	for (VoxInstance& instance : instances)
 	{
 		instance.cleanup();
 	}

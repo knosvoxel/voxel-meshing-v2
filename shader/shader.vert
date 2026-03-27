@@ -1,16 +1,8 @@
 #version 460 core
 #extension GL_NV_gpu_shader5 : enable
 
-struct Vertex{
-	float16_t x, y, z;
-};
-
 layout(binding = 0, std430) readonly restrict buffer vertexBuffer {
-	Vertex vertices[];
-};
-
-layout(binding = 1, std430) readonly restrict buffer packedDataBuffer {
-	uint packedData[];
+	uint vertices[];
 };
 
 uniform mat4 mvp;
@@ -20,13 +12,11 @@ flat out uint normal_idx;
 	
 void main()
 {
-	Vertex v = vertices[gl_VertexID];
-	vec3 pos = vec3(v.x, v.y, v.z);
+	uint v = vertices[gl_VertexID];
+    vec3 pos = vec3(v & 63, (v >> 6) & 63, (v >> 12) & 63);
 
-	uint data = packedData[gl_VertexID / 4];
-
-    color_idx = data & 255;
-	normal_idx = (data >> 8) & 7; // loweset 3 bits as only values from 0 - 5 are used
+    color_idx  = (v >> 22) & 255;
+	normal_idx = (v >> 18) & 7;
 
 	gl_Position = mvp * vec4(pos, 1.0);
 }

@@ -11,22 +11,22 @@ static inline uint8 getVoxelInNegDir(FaceDirection dir, const uint8* voxels, uin
 
     switch (dir)
     {
-    case UP:
+    case FaceDirection::UP:
         offset = ivec3(0, 1, 0);
         break;
-    case DOWN:
+    case FaceDirection::DOWN:
         offset = ivec3(0, -1, 0);
         break;
-    case LEFT:
+    case FaceDirection::LEFT:
         offset = ivec3(-1, 0, 0);
         break;
-    case RIGHT:
+    case FaceDirection::RIGHT:
         offset = ivec3(1, 0, 0);
         break;
-    case FORWARD:
+    case FaceDirection::FORWARD:
         offset = ivec3(0, 0, -1);
         break;
-    case BACK:
+    case FaceDirection::BACK:
         offset = ivec3(0, 0, 1);
         break;
     default:
@@ -40,22 +40,22 @@ static inline uint8 getVoxelInNegDir(FaceDirection dir, const uint8* voxels, uin
 static inline int32 negateAxis(FaceDirection& dir) {
     switch (dir)
     {
-    case UP:
+    case FaceDirection::UP:
         return -1;
         break;
-    case DOWN:
+    case FaceDirection::DOWN:
         return 0;
         break;
-    case LEFT:
+    case FaceDirection::LEFT:
         return 0;
         break;
-    case RIGHT:
+    case FaceDirection::RIGHT:
         return -1;
         break;
-    case FORWARD:
+    case FaceDirection::FORWARD:
         return 0;
         break;
-    case BACK:
+    case FaceDirection::BACK:
         return 1;
         break;
     default:
@@ -76,11 +76,11 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
         uint32 y = 0;
         while (y < 32) {
             // count trailing zero bits to find first solid voxel
-            y += std::countl_zero(data[row] >> y);
+            y += std::countr_zero(data[row] >> y);
 
             if (y >= 32) continue;
 
-            uint32 height = std::countl_one(data[row] >> y);
+            uint32 height = std::countr_one(data[row] >> y);
 
             // convert height value to equal amount of positive bits:
             // e.g. 1 = 0b1, 2 = 0b11, 4 = 0b1111, 8 = 0b11111111
@@ -97,7 +97,7 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
                 }
 
                 // remove bits we expanded into as each face can only be meshed once
-                data[row + width] == data[row + width] & !mask;
+                data[row + width] = data[row + width] & ~mask;
                 width += 1;
             }
             greedy_quads.push_back(GreedyQuad{
@@ -114,22 +114,22 @@ static ivec3 worldToSample(FaceDirection dir, int32 axis, int32 x, int32 y)
 {
     switch (dir)
     {
-    case UP:
+    case FaceDirection::UP:
         return ivec3(x, axis + 1, y);
         break;
-    case DOWN:
+    case FaceDirection::DOWN:
         return ivec3(x, axis, y);
         break;
-    case LEFT:
+    case FaceDirection::LEFT:
         return ivec3(axis, y, x);
         break;
-    case RIGHT:
+    case FaceDirection::RIGHT:
         return ivec3(axis + 1, y, x);
         break;
-    case FORWARD:
+    case FaceDirection::FORWARD:
         return ivec3(x, y, axis);
         break;
-    case BACK:
+    case FaceDirection::BACK:
         return ivec3(x, y, axis + 1);
         break;
     default:
@@ -142,22 +142,22 @@ static uint32 getNormalIndex(FaceDirection dir)
 {
     switch (dir)
     {
-    case UP:
+    case FaceDirection::UP:
         return 0;
         break;
-    case DOWN:
+    case FaceDirection::DOWN:
         return 1;
         break;
-    case LEFT:
+    case FaceDirection::LEFT:
         return 2;
         break;
-    case RIGHT:
+    case FaceDirection::RIGHT:
         return 3;
         break;
-    case FORWARD:
+    case FaceDirection::FORWARD:
         return 4;
         break;
-    case BACK:
+    case FaceDirection::BACK:
         return 5;
         break;
     default:
@@ -169,22 +169,22 @@ static uint32 getNormalIndex(FaceDirection dir)
 static bool isReverseOrder(FaceDirection dir) {
     switch (dir)
     {
-    case UP:
+    case FaceDirection::UP:
         return true;
         break;
-    case DOWN:
+    case FaceDirection::DOWN:
         return false;
         break;
-    case LEFT:
+    case FaceDirection::LEFT:
         return false;
         break;
-    case RIGHT:
+    case FaceDirection::RIGHT:
         return true;
         break;
-    case FORWARD:
+    case FaceDirection::FORWARD:
         return true;
         break;
-    case BACK:
+    case FaceDirection::BACK:
         return false;
         break;
     default:
@@ -194,7 +194,7 @@ static bool isReverseOrder(FaceDirection dir) {
 
 static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color, GreedyQuad& quad) {
     int32 negated_axis = negateAxis(dir);
-    int32 axis = axis + negated_axis;
+    axis = axis + negated_axis;
 
     uint32 v1 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y), getNormalIndex(dir), color);
     uint32 v2 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y), getNormalIndex(dir), color);
@@ -270,56 +270,50 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data)
     ChunkMesh mesh{};
     std::vector<uint32> quads{};
 
-    std::vector<uint32> up_quads = generateVerticesFromFace(UP, voxelData);
-    std::vector<uint32> down_quads = generateVerticesFromFace(DOWN, voxelData);
-    std::vector<uint32> left_quads = generateVerticesFromFace(LEFT, voxelData);
-    std::vector<uint32> right_quads = generateVerticesFromFace(RIGHT, voxelData);
-    std::vector<uint32> forward_quads = generateVerticesFromFace(FORWARD, voxelData);
-    std::vector<uint32> back_quads = generateVerticesFromFace(BACK, voxelData);
+    std::vector<uint32> up_quads = generateVerticesFromFace(FaceDirection::UP, voxelData);
+    std::vector<uint32> down_quads = generateVerticesFromFace(FaceDirection::DOWN, voxelData);
+    std::vector<uint32> left_quads = generateVerticesFromFace(FaceDirection::LEFT, voxelData);
+    std::vector<uint32> right_quads = generateVerticesFromFace(FaceDirection::RIGHT, voxelData);
+    std::vector<uint32> forward_quads = generateVerticesFromFace(FaceDirection::FORWARD, voxelData);
+    std::vector<uint32> back_quads = generateVerticesFromFace(FaceDirection::BACK, voxelData);
 
     quads.insert(quads.end(), up_quads.begin(), up_quads.end());
     quads.insert(quads.end(), down_quads.begin(), down_quads.end());
-    quads.insert(quads.end(), left_quads.begin(), up_quads.end());
+    quads.insert(quads.end(), left_quads.begin(), left_quads.end());
     quads.insert(quads.end(), right_quads.begin(), right_quads.end());
     quads.insert(quads.end(), forward_quads.begin(), forward_quads.end());
     quads.insert(quads.end(), back_quads.begin(), back_quads.end());
     
     mesh.vertices.insert(mesh.vertices.end(), quads.begin(), quads.end());
+
+    uint32 vertexSSBO;
+    uint32 ibo;
+
     if (mesh.vertices.empty()) {
-        return mesh;
+        vao = 0;
+        vertexSSBO = 0;
+        ibo = 0;
     }
     else {
         mesh.indices = generateIndices(mesh.vertices.size());
-        return mesh;
-    }
 
-    uint32 vertexSSBO;
-    uint32 indexSSBO;
-    uint32 ibo;
-
-    if (mesh.vertices.size() > 0) {
         glCreateBuffers(1, &vertexSSBO);
         glNamedBufferStorage(vertexSSBO, sizeof(uint32) * mesh.vertices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
         glNamedBufferSubData(vertexSSBO, 0, sizeof(uint32) * mesh.vertices.size(), mesh.vertices.data());
 
-        glCreateBuffers(1, &indexSSBO);
-        glNamedBufferStorage(indexSSBO, sizeof(uint32) * mesh.indices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glNamedBufferSubData(indexSSBO, 0, sizeof(uint32) * mesh.indices.size(), mesh.indices.data());
+        glCreateBuffers(1, &ibo);
+        glNamedBufferStorage(ibo, sizeof(uint32) * mesh.indices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
+        glNamedBufferSubData(ibo, 0, sizeof(uint32) * mesh.indices.size(), mesh.indices.data());
 
         glCreateVertexArrays(1, &vao);
         glVertexArrayElementBuffer(vao, ibo);
     }
-    else {
-        vao = 0;
-        ibo = 0;
-        vertexSSBO = 0;
-        indexSSBO = 0;
-    }
 
     mesh.vao = vao;
-    mesh.ibo = ibo;
     mesh.vertexSSBO = vertexSSBO;
-    mesh.indexSSBO = indexSSBO;
+    mesh.ibo = ibo;
+
+    return mesh;
 }
 
 std::vector<std::unique_ptr<Chunk>> VoxInstance::generateChunks()
@@ -354,6 +348,8 @@ std::vector<std::unique_ptr<Chunk>> VoxInstance::generateChunks()
         }
 
         if (!local.is_empty) {
+            local.worldTransform = translate(mat4(1.0f), vec3(worldOffset) + vec3(cx, cy, cz) * 32.0f - vec3(floor(instanceDimensions.x / 2.0), floor(instanceDimensions.y / 2.0), floor(instanceDimensions.z / 2.0)));
+
             int32 idx = getPoolIndex(cx, cy, cz);
             chunk_pool[idx] = std::make_unique<Chunk>(local);
         }
@@ -379,16 +375,18 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     }
 }
 
-void VoxInstance::render()
+void VoxInstance::render(Shader& shader, mat4& mvp)
 {
     for (ChunkMesh& mesh : meshes)
     {
+        shader.setMat4("mvp", mvp * mesh.transform);
+
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mesh.vertexSSBO);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.indexSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.ibo);
 
         glBindVertexArray(vao);
         //glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommand);
-        glDrawElements(GL_TRIANGLES, mesh.vertices.size() / 3, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, mesh.vertices.size(), GL_UNSIGNED_INT, 0);
     }
     
 
@@ -402,7 +400,7 @@ void VoxInstance::cleanup()
     for (ChunkMesh& mesh : meshes) {
         glDeleteBuffers(1, &mesh.vao);
         glDeleteBuffers(1, &mesh.vertexSSBO);
-        glDeleteBuffers(1, &mesh.indexSSBO);
+        glDeleteBuffers(1, &mesh.ibo);
         glDeleteBuffers(1, &mesh.ibo);
     }
 

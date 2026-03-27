@@ -8,13 +8,16 @@
 #include <deque>
 #include <memory>
 
+#include <ext/matrix_transform.hpp>
+
 #include "ogt_wrapper.h"
 #include "compute.h"
 #include "timer.h"
+#include "shader.h"
 
 using namespace glm;
 
-enum FaceDirection {
+enum class FaceDirection {
 	UP,
 	DOWN,
 	LEFT,
@@ -40,13 +43,6 @@ typedef struct DrawElementsIndirectCommand {
 	uint32 baseInstance;
 };
 
-//struct MeshBuffers {
-//	uint32* vertices;
-//	uint32* indices;
-//	uint32* packedData;
-//	DrawElementsIndirectCommand* indirectCommand;
-//};
-
 struct GreedyQuad {
 	ivec2 start_pos;
 	uint32 width;
@@ -56,7 +52,7 @@ struct GreedyQuad {
 // TODO: draw elements directly
 
 struct Chunk {
-	vec3 localOffset;
+	mat4 worldTransform;
 	
 	static constexpr int32 sizeXZ = 32, sizeY = 32;
 	static constexpr int32 num_voxels = sizeXZ * sizeXZ * sizeY;
@@ -76,9 +72,8 @@ struct ChunkMesh {
 	std::vector<uint32> indices;
 
 	uint32 vao;
-	uint32 ibo;
 	uint32 vertexSSBO;
-	uint32 indexSSBO;
+	uint32 ibo;
 };
 
 struct VoxInstance {
@@ -121,7 +116,7 @@ struct VoxInstance {
 		return cx + cz * sizeInChunks.x + cy * sizeInChunks.x * sizeInChunks.z;
 	}
 
-	void render();
+	void render(Shader& shader, mat4& mvp);
 
 	void cleanup();
 
