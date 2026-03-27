@@ -265,15 +265,8 @@ std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
     return indices;
 }
 
-ChunkMesh VoxInstance::generateChunkMesh(const uint8* voxelData, InstanceData& instanceData, MeasurementData& measurements)
+ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data)
 {
-    Timer timer;
-    measurements.dispatchPre = timer.elapsedMilliseconds();
-
-    instanceDimensions = instanceData.modelSize;
-
-    timer.start();
-
     ChunkMesh mesh{};
     std::vector<uint32> quads{};
 
@@ -300,75 +293,104 @@ ChunkMesh VoxInstance::generateChunkMesh(const uint8* voxelData, InstanceData& i
         return mesh;
     }
 
-    timer.stop();
+    uint32 vertexSSBO;
+    uint32 indexSSBO;
+    uint32 ibo;
 
-    measurements.meshGenerationDuration = timer.elapsedMilliseconds() / 1000.0;
+    if (mesh.vertices.size() > 0) {
+        glCreateBuffers(1, &vertexSSBO);
+        glNamedBufferStorage(vertexSSBO, sizeof(uint32) * mesh.vertices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
+        glNamedBufferSubData(vertexSSBO, 0, sizeof(uint32) * mesh.vertices.size(), mesh.vertices.data());
 
-    //uint32 indexCount = faceCounter.load() * 6;
-    //uint32 vertexCount = faceCounter.load() * 4;
-    //uint32 faceCount = faceCounter.load();
+        glCreateBuffers(1, &indexSSBO);
+        glNamedBufferStorage(indexSSBO, sizeof(uint32) * mesh.indices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
+        glNamedBufferSubData(indexSSBO, 0, sizeof(uint32) * mesh.indices.size(), mesh.indices.data());
 
-    //buffer.indirectCommand->count = indexCount;
+        glCreateVertexArrays(1, &vao);
+        glVertexArrayElementBuffer(vao, ibo);
+    }
+    else {
+        vao = 0;
+        ibo = 0;
+        vertexSSBO = 0;
+        indexSSBO = 0;
+    }
 
-    //measurements.vertexCount += vertexCount;
-    //measurements.indexCount += indexCount;
-    //measurements.packedDataCount += faceCount;
-
-    timer.start();
-
-    //if (vertexCount > 0) {
-    //    glCreateBuffers(1, &vertexSSBO);
-    //    glNamedBufferStorage(vertexSSBO, sizeof(Vertex) * vertexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-    //    glNamedBufferSubData(vertexSSBO, 0, sizeof(Vertex) * vertexCount, buffer.vertices);
-
-    //    glCreateBuffers(1, &packedSSBO);
-    //    glNamedBufferStorage(packedSSBO, sizeof(uint32) * faceCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-    //    glNamedBufferSubData(packedSSBO, 0, sizeof(uint32) * faceCount, buffer.packedData);
-
-    //    glCreateBuffers(1, &ibo);
-    //    glNamedBufferStorage(ibo, sizeof(uint32) * indexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-    //    glNamedBufferSubData(ibo, 0, sizeof(uint32) * indexCount, buffer.indices);
-
-    //    glCreateBuffers(1, &indirectCommand);
-    //    glNamedBufferStorage(indirectCommand, sizeof(DrawElementsIndirectCommand), buffer.indirectCommand, GL_DYNAMIC_STORAGE_BIT);
-
-    //    glCreateVertexArrays(1, &vao);
-    //    glVertexArrayElementBuffer(vao, ibo);
-    //}
-    //else {
-    //    vao = 0;
-    //    vertexSSBO = 0;
-    //    packedSSBO = 0;
-    //    ibo = 0;
-    //    indirectCommand = 0;
-    //}
-    timer.stop();
-    measurements.dispatchPost = timer.elapsedMilliseconds();
+    mesh.vao = vao;
+    mesh.ibo = ibo;
+    mesh.vertexSSBO = vertexSSBO;
+    mesh.indexSSBO = indexSSBO;
 }
 
-std::vector<Chunk> VoxInstance::generateChunks(const uint8* voxelData)
+std::vector<std::unique_ptr<Chunk>> VoxInstance::generateChunks()
 {
-    return std::vector<Chunk>();
+    int32 total_chunks = sizeInChunks.x * sizeInChunks.y * sizeInChunks.z;
+    std::vector<std::unique_ptr<Chunk>> chunk_pool(total_chunks);
+
+#pragma omp parallel for collapse(3) schedule(static)
+    for (int32 cy = 0; cy < sizeInChunks.y; cy++)
+    for (int32 cz = 0; cz < sizeInChunks.z; cz++)
+    for (int32 cx = 0; cx < sizeInChunks.x; cx++)
+    {
+        Chunk local{};
+
+        for (int32 ly = 0; ly < local.sizeY; ly++)
+        for (int32 lz = 0; lz < local.sizeXZ; lz++)
+        for (int32 lx = 0; lx < local.sizeXZ; lx++)
+        {
+            ivec3 voxel_pos = ivec3(cx, cy, cz) * chunk_size + ivec3(lx, ly, lz);
+
+            if (voxel_pos.x >= instanceDimensions.x ||
+                voxel_pos.y >= instanceDimensions.y ||
+                voxel_pos.z >= instanceDimensions.z)
+                continue;
+
+            uint32 col_idx = voxel_pos.x + voxel_pos.y * instanceDimensions.x + voxel_pos.z * instanceDimensions.x * instanceDimensions.y;
+            uint8 col = voxelData[col_idx];
+            if (col_idx != 0) {
+                local.voxel_data[Chunk::getIndex(lx, ly, lz)] = col;
+                local.is_empty = false;
+            }
+        }
+
+        if (!local.is_empty) {
+            int32 idx = getPoolIndex(cx, cy, cz);
+            chunk_pool[idx] = std::make_unique<Chunk>(local);
+        }
+    }
+
+    return chunk_pool;
 }
 
-void VoxInstance::generateMesh(const uint8* voxelData, mat4 worldTransform)
+void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, vec3 worldOffset, MeasurementData& measurements)
 {
-    chunkData = generateChunks(voxelData);
+    instanceDimensions = ivec3(modelSize);
+    this->voxelData = voxelData;
+    this->worldOffset = worldOffset;
+
+    sizeInChunks = ivec3((instanceDimensions + chunk_size - 1) / chunk_size);
+    // worldTransform = 
+
+    chunkData = generateChunks();
 
     std::vector<ChunkMesh> meshes;
-    for (Chunk chunk : chunkData) {
-        meshes.append(generateChunkMesh());
+    for (auto& chunk : chunkData) {
+        meshes.push_back(generateChunkMesh(chunk->voxel_data));
     }
 }
 
 void VoxInstance::render()
 {
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vertexSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, packedSSBO);
+    for (ChunkMesh& mesh : meshes)
+    {
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mesh.vertexSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.indexSSBO);
 
-    glBindVertexArray(vao);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommand);
-    glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(vao);
+        //glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommand);
+        glDrawElements(GL_TRIANGLES, mesh.vertices.size() / 3, GL_UNSIGNED_INT, 0);
+    }
+    
 
     glBindVertexArray(0);
 }
@@ -376,12 +398,17 @@ void VoxInstance::render()
 void VoxInstance::cleanup()
 {
     glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(1, &vertexSSBO);
-    glDeleteBuffers(1, &packedSSBO);
-    glDeleteBuffers(1, &ibo);
+
+    for (ChunkMesh& mesh : meshes) {
+        glDeleteBuffers(1, &mesh.vao);
+        glDeleteBuffers(1, &mesh.vertexSSBO);
+        glDeleteBuffers(1, &mesh.indexSSBO);
+        glDeleteBuffers(1, &mesh.ibo);
+    }
+
     glDeleteBuffers(1, &indirectCommand);
     glDeleteBuffers(1, &instanceDataBuffer);
     glDeleteBuffers(1, &rotatedModelSSBO);
     
-    free(voxelData);
+    //free(voxelData);
 }

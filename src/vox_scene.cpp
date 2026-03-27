@@ -72,34 +72,34 @@ void VoxScene::load(const char* path)
 
 	// staging buffer size calculation based on which model is the biggest in the scene
 	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
-	int32 maxSize = 0;
-	for (size_t i = 0; i < voxScene->num_models; i++) {
-		const ogt_vox_model* currModel = voxScene->models[i];
+	//int32 maxSize = 0;
+	//for (size_t i = 0; i < voxScene->num_models; i++) {
+	//	const ogt_vox_model* currModel = voxScene->models[i];
 
-		int32 currX = (currModel->size_x + 1) >> 1;
-		int32 currY = currModel->size_y;
-		int32 currZ = currModel->size_z;
+	//	int32 currX = (currModel->size_x + 1) >> 1;
+	//	int32 currY = currModel->size_y;
+	//	int32 currZ = currModel->size_z;
 
-		int32 currSize = currX * currY * currZ;
+	//	int32 currSize = currX * currY * currZ;
 
-		if (currSize > maxSize) maxSize = currSize;
-	}
+	//	if (currSize > maxSize) maxSize = currSize;
+	//}
 
 	// 24 vertices per voxel max, 4 on each side
-	const uint32 maxVertices = maxSize * 6 * 4;
-	const uint32 maxIndices = maxSize * 6 * 6;
-	const uint32 maxFaces = maxSize * 6;
+	//const uint32 maxVertices = maxSize * 6 * 4;
+	//const uint32 maxIndices = maxSize * 6 * 6;
+	//const uint32 maxFaces = maxSize * 6;
 
-	std::vector<Vertex> stagingVertices(maxVertices);
-	std::vector<uint32> stagingIndices(maxIndices);
-	std::vector<uint32> stagingPacked(maxFaces);
-	DrawElementsIndirectCommand stagingIndirect{};
+	//std::vector<Vertex> stagingVertices(maxVertices);
+	//std::vector<uint32> stagingIndices(maxIndices);
+	//std::vector<uint32> stagingPacked(maxFaces);
+	//DrawElementsIndirectCommand stagingIndirect{};
 
-	MeshBuffers buffer;
-	buffer.vertices = stagingVertices.data();
-	buffer.indices = stagingIndices.data();
-	buffer.packedData = stagingPacked.data();
-	buffer.indirectCommand = &stagingIndirect;
+	//MeshBuffers buffer;
+	//buffer.vertices = stagingVertices.data();
+	//buffer.indices = stagingIndices.data();
+	//buffer.packedData = stagingPacked.data();
+	//buffer.indirectCommand = &stagingIndirect;
 
 	// DEBUG INFORMATION //
 	uint64 totalSizeX = 0;
@@ -146,14 +146,14 @@ void VoxScene::load(const char* path)
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
 		rotationComputeDurationTotal += rotationDuration;
 
-		InstanceData instanceData;
-		instanceData.modelSize = rotatedModelSize;
-		instanceData.worldOffset = instanceOffset;
+		//InstanceData instanceData;
+		//instanceData.modelSize = rotatedModelSize;
+		//instanceData.worldOffset = instanceOffset;
 
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
-		instances.back().generateChunkMesh(rotatedModelData, buffer, instanceData, measurements);
+		instances.back().generateInstanceMesh(rotatedModelData, rotatedModelSize, instanceOffset, measurements);
 		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK? Funktioniert aktuell auch nur auf CPU
 
 		local.start();

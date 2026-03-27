@@ -6,6 +6,7 @@
 #include <array>
 #include <bit>
 #include <deque>
+#include <memory>
 
 #include "ogt_wrapper.h"
 #include "compute.h"
@@ -20,11 +21,6 @@ enum FaceDirection {
 	RIGHT,
 	FORWARD,
 	BACK
-};
-
-typedef struct InstanceData {
-	vec3 modelSize;
-	vec3 worldOffset;
 };
 
 typedef struct MeasurementData {
@@ -60,14 +56,29 @@ struct GreedyQuad {
 // TODO: draw elements directly
 
 struct Chunk {
-	mat4 localTransform;
-	std::vector<uint8> voxelData;
+	vec3 localOffset;
+	
+	static constexpr int32 sizeXZ = 32, sizeY = 32;
+	static constexpr int32 num_voxels = sizeXZ * sizeXZ * sizeY;
+
+	bool is_empty = true;
+
+	uint8 voxel_data[num_voxels] = {};
+
+	static int32 getIndex(int32 x, int32 y, int32 z) {
+		return (x & 31) | ((z & 31) << 5) | ((y & 31) << 10);
+	}
 };
 
 struct ChunkMesh {
 	mat4 transform;
 	std::vector<uint32> vertices;
 	std::vector<uint32> indices;
+
+	uint32 vao;
+	uint32 ibo;
+	uint32 vertexSSBO;
+	uint32 indexSSBO;
 };
 
 struct VoxInstance {
@@ -81,17 +92,11 @@ struct VoxInstance {
 
 			// Move data
 			vao = other.vao;
-			ibo = other.ibo;
-			vertexSSBO = other.vertexSSBO;
-			packedSSBO = other.packedSSBO;
 			indirectCommand = other.indirectCommand;
 			instanceDataBuffer = other.instanceDataBuffer;
 
 			// Leave the other object in a valid state
 			other.vao = 0;
-			other.ibo = 0;
-			other.vertexSSBO = 0;
-			other.packedSSBO = 0;
 			other.indirectCommand = 0;
 			other.instanceDataBuffer = 0;
 		}
@@ -103,29 +108,35 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	//void sliceX(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-	//void sliceY(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-	//void sliceZ(const uint8* voxels, const InstanceData& instanceData, MeshBuffers& buffer, std::atomic<uint32>& counter);
-	//
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
 	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData);
 	std::vector<uint32> generateIndices(size_t vertex_count);
-	ChunkMesh generateChunkMesh(const uint8* voxelData, InstanceData& instanceData, MeasurementData& measurements);
-	std::vector<Chunk> generateChunks(const uint8* voxelData);
-	void generateMesh(const uint8* voxelData, mat4 worldTransform);
+	ChunkMesh generateChunkMesh(uint8* voxel_data);
+	std::vector<std::unique_ptr<Chunk>> generateChunks();
+	void generateInstanceMesh(const uint8* voxelData, vec3 modelSize,
+	vec3 worldOffset, MeasurementData& measurements);
+
+	const int32 getPoolIndex(int32 cx, int32 cy, int32 cz)
+	{
+		return cx + cz * sizeInChunks.x + cy * sizeInChunks.x * sizeInChunks.z;
+	}
 
 	void render();
 
 	void cleanup();
 
-	uint8* voxelData;
+	const uint8* voxelData;
 	ivec3 instanceDimensions;
+	ivec3 sizeInChunks;
+	ivec3 worldOffset;
 
-	std::vector<Chunk> chunkData;
+	static const int32 chunk_size = 32;
+
+	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
 
 	uint32 //vbo = 0, 
 		vao = 0, 
-		ibo = 0, vertexSSBO = 0, packedSSBO = 0, rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
+		rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
 		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0;
 };
