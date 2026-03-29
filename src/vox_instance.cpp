@@ -77,8 +77,7 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
         while (y < 32) {
             // count trailing zero bits to find first solid voxel
             y += std::countr_zero(data[row] >> y);
-
-            if (y >= 32) continue;
+            if (y >= 32) break;
 
             uint32 height = std::countr_one(data[row] >> y);
 
@@ -105,6 +104,8 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
                 width,
                 height
                 });
+
+            y += height;
         }
     }
     return greedy_quads;
@@ -223,7 +224,8 @@ std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, con
     {
         for (int32 color = 1; color <= 255; color++) {
             // create binary grid
-            std::array<uint32, 32> x_data;
+            std::array<uint32, 32> x_data{};
+
             for (int32 i = 0; i < size * size; i++)
             {
                 uint32 row = i % size;
@@ -231,6 +233,8 @@ std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, con
                 ivec3 pos = worldToSample(dir, axis, row, column);
                 uint8 current = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
                 uint8 neg_z = getVoxelInNegDir(dir, voxelData, pos.x, pos.y, pos.z, instanceDimensions);
+
+                if (current != color) continue;
 
                 bool is_solid = current != 0 && neg_z == 0;
                 x_data[row] = ((1 << column) * uint32(is_solid)) | x_data[row];
@@ -267,15 +271,19 @@ std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
 
 ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data)
 {
+    std::cout << "A" << std::endl;
+
     ChunkMesh mesh{};
     std::vector<uint32> quads{};
 
-    std::vector<uint32> up_quads = generateVerticesFromFace(FaceDirection::UP, voxelData);
-    std::vector<uint32> down_quads = generateVerticesFromFace(FaceDirection::DOWN, voxelData);
-    std::vector<uint32> left_quads = generateVerticesFromFace(FaceDirection::LEFT, voxelData);
-    std::vector<uint32> right_quads = generateVerticesFromFace(FaceDirection::RIGHT, voxelData);
-    std::vector<uint32> forward_quads = generateVerticesFromFace(FaceDirection::FORWARD, voxelData);
-    std::vector<uint32> back_quads = generateVerticesFromFace(FaceDirection::BACK, voxelData);
+    std::vector<uint32> up_quads = generateVerticesFromFace(FaceDirection::UP, voxel_data);
+    std::vector<uint32> down_quads = generateVerticesFromFace(FaceDirection::DOWN, voxel_data);
+    std::vector<uint32> left_quads = generateVerticesFromFace(FaceDirection::LEFT, voxel_data);
+    std::vector<uint32> right_quads = generateVerticesFromFace(FaceDirection::RIGHT, voxel_data);
+    std::vector<uint32> forward_quads = generateVerticesFromFace(FaceDirection::FORWARD, voxel_data);
+    std::vector<uint32> back_quads = generateVerticesFromFace(FaceDirection::BACK, voxel_data);
+    
+    std::cout << "B" << std::endl;
 
     quads.insert(quads.end(), up_quads.begin(), up_quads.end());
     quads.insert(quads.end(), down_quads.begin(), down_quads.end());
@@ -285,6 +293,8 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data)
     quads.insert(quads.end(), back_quads.begin(), back_quads.end());
     
     mesh.vertices.insert(mesh.vertices.end(), quads.begin(), quads.end());
+
+    std::cout << "C" << std::endl;
 
     uint32 vertexSSBO;
     uint32 ibo;
@@ -312,6 +322,8 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data)
     mesh.vao = vao;
     mesh.vertexSSBO = vertexSSBO;
     mesh.ibo = ibo;
+
+    std::cout << "D" << std::endl;
 
     return mesh;
 }
@@ -341,7 +353,7 @@ std::vector<std::unique_ptr<Chunk>> VoxInstance::generateChunks()
 
             uint32 col_idx = voxel_pos.x + voxel_pos.y * instanceDimensions.x + voxel_pos.z * instanceDimensions.x * instanceDimensions.y;
             uint8 col = voxelData[col_idx];
-            if (col_idx != 0) {
+            if (col != 0) {
                 local.voxel_data[Chunk::getIndex(lx, ly, lz)] = col;
                 local.is_empty = false;
             }
