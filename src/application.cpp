@@ -4,7 +4,7 @@ const uint32 WIDTH = 1600;
 const uint32 HEIGHT = 900;
 
 const char* WINDOW_NAME = "Voxel Meshing Slicing CPU";
-const char* VOX_FILE_PATH = "../../res/worst_case.vox";
+const char* VOX_FILE_PATH = "../../res/temple.vox";
 
 const float NEAR = 0.1f;
 const float FAR = 10000.0f;
@@ -99,7 +99,7 @@ void Application::initOpenGL()
 
     glEnable(GL_CULL_FACE); // Enable culling
     glEnable(GL_FRONT); // Cull front faces
-    glFrontFace(GL_CW);
+    glFrontFace(GL_CCW);
 
     //glEnable(GL_MULTISAMPLE);
     //glEnable(GL_DEBUG_OUTPUT);

@@ -61,8 +61,10 @@ struct Chunk {
 
 	uint8 voxel_data[num_voxels] = {};
 
+	ivec3 chunk_offset;
+
 	static int32 getIndex(int32 x, int32 y, int32 z) {
-		return (x & 31) | ((z & 31) << 5) | ((y & 31) << 10);
+		return x + y * sizeXZ + z * sizeXZ * sizeY;
 	}
 };
 
@@ -86,12 +88,10 @@ struct VoxInstance {
 			cleanup();
 
 			// Move data
-			vao = other.vao;
 			indirectCommand = other.indirectCommand;
 			instanceDataBuffer = other.instanceDataBuffer;
 
 			// Leave the other object in a valid state
-			other.vao = 0;
 			other.indirectCommand = 0;
 			other.instanceDataBuffer = 0;
 		}
@@ -104,10 +104,10 @@ struct VoxInstance {
 	}
 
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
-	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData);
+	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData, ivec3 chunk_offset);
 	std::vector<uint32> generateIndices(size_t vertex_count);
-	ChunkMesh generateChunkMesh(uint8* voxel_data);
-	std::vector<std::unique_ptr<Chunk>> generateChunks();
+	ChunkMesh generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset);
+	void generateChunks(std::vector<std::unique_ptr<Chunk>>& data);
 	void generateInstanceMesh(const uint8* voxelData, vec3 modelSize,
 	vec3 worldOffset, MeasurementData& measurements);
 
@@ -130,8 +130,7 @@ struct VoxInstance {
 	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
 
-	uint32 //vbo = 0, 
-		vao = 0, 
+	uint32
 		rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
 		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0;
 };
