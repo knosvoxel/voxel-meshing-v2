@@ -103,9 +103,10 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
+	std::vector<uint32> generateIndices(size_t vertex_count);
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
 	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData, ivec3 chunk_offset);
-	std::vector<uint32> generateIndices(size_t vertex_count);
+
 	ChunkMesh generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset);
 	void generateChunks(std::vector<std::unique_ptr<Chunk>>& data);
 	void generateInstanceMesh(const uint8* voxelData, vec3 modelSize,

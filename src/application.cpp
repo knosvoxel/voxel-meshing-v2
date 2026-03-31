@@ -4,7 +4,7 @@ const uint32 WIDTH = 1600;
 const uint32 HEIGHT = 900;
 
 const char* WINDOW_NAME = "Voxel Meshing Slicing CPU";
-const char* VOX_FILE_PATH = "../../res/temple.vox";
+const char* VOX_FILE_PATH = "../../res/worst_case.vox";
 
 const float NEAR = 0.1f;
 const float FAR = 10000.0f;

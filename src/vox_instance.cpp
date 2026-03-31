@@ -67,57 +67,6 @@ static inline int32 negateAxis(FaceDirection& dir) {
     }
 }
 
-static inline uint32 makeVertex(ivec3 pos, uint32 normal, uint8 color) {
-    return (uint32(pos.x) & 63u)
-        | ((uint32(pos.y) & 63u) << 6)
-        | ((uint32(pos.z) & 63u) << 12)
-        | (normal << 18)
-        | (uint32(color) << 22);
-}
-
-std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& data)
-{
-    std::vector<GreedyQuad> greedy_quads;
-    for (int32 row = 0; row < data.size(); row++)
-    {
-        uint32 y = 0;
-        while (y < 32) {
-            // count trailing zero bits to find first solid voxel
-            y += std::countr_zero(data[row] >> y);
-            if (y >= 32) break;
-
-            uint32 height = std::countr_one(data[row] >> y);
-
-            // convert height value to equal amount of positive bits:
-            // e.g. 1 = 0b1, 2 = 0b11, 4 = 0b1111, 8 = 0b11111111
-            uint32 height_as_mask = (height == 32) ? 0xFFFFFFFF : ((1u << height) - 1);
-            uint32 mask = height_as_mask << y;
-
-            uint32 width = 1;
-            // grow horizontally
-            while (row + width < 32) {
-                // fetch bits spanning height in next row
-                uint32 next_row_height = (data[row + width] >> y) & height_as_mask;
-                if (next_row_height != height_as_mask) {
-                    break; // can't expand further
-                }
-
-                // remove bits we expanded into as each face can only be meshed once
-                data[row + width] &= ~mask;
-                width += 1;
-            }
-            greedy_quads.push_back(GreedyQuad{
-                ivec2(row, y),
-                width,
-                height
-                });
-
-            y += height;
-        }
-    }
-    return greedy_quads;
-}
-
 static ivec3 worldToSample(FaceDirection dir, int32 axis, int32 x, int32 y)
 {
     switch (dir)
@@ -194,6 +143,14 @@ static bool isReverseOrder(FaceDirection dir) {
     }
 }
 
+static inline uint32 makeVertex(ivec3 pos, uint32 normal, uint8 color) {
+    return (uint32(pos.x) & 63u)
+        | ((uint32(pos.y) & 63u) << 6)
+        | ((uint32(pos.z) & 63u) << 12)
+        | (normal << 18)
+        | (uint32(color) << 22);
+}
+
 static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color, GreedyQuad& quad) {
     int32 negated_axis = negateAxis(dir);
     axis = axis + negated_axis;
@@ -209,40 +166,6 @@ static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uin
         std::reverse(new_vertices.begin() + 1, new_vertices.end());
     }
     vertices.insert(vertices.end(), new_vertices.begin(), new_vertices.end());
-}
-
-std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, const uint8* voxelData, ivec3 chunk_offset)
-{
-    std::vector<uint32> vertices;
-    uint32 size = 32;
-    for (int32 axis = 0; axis < size; axis++)
-    {
-        for (int32 color = 1; color <= 255; color++) {
-            // create binary grid
-            std::array<uint32, 32> x_data{};
-
-            for (int32 i = 0; i < size * size; i++)
-            {
-                uint32 row = i % size;
-                uint32 column = (i / size);
-                ivec3 pos = worldToSample(dir, axis, row, column) + chunk_offset;
-                uint8 current = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
-                uint8 neg_z = getVoxelInNegDir(dir, voxelData, pos.x, pos.y, pos.z, instanceDimensions);
-
-                if (current != color) continue;
-
-                bool is_solid = current != 0 && neg_z == 0;
-                x_data[row] = ((1 << column) * uint32(is_solid)) | x_data[row];
-            }
-            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(x_data);
-            for (GreedyQuad quad : quads_from_axis)
-            {
-                appendVertices(vertices, dir, axis, color, quad);
-            }
-        }
-    }
-
-    return vertices;
 }
 
 std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
@@ -262,6 +185,82 @@ std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
     }
 
     return indices;
+}
+
+std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& data)
+{
+    std::vector<GreedyQuad> greedy_quads;
+    for (int32 row = 0; row < data.size(); row++)
+    {
+        uint32 y = 0;
+        while (y < 32) {
+            // count trailing zero bits to find first solid voxel
+            y += std::countr_zero(data[row] >> y);
+            if (y >= 32) break;
+
+            uint32 height = std::countr_one(data[row] >> y);
+
+            // convert height value to equal amount of positive bits:
+            // e.g. 1 = 0b1, 2 = 0b11, 4 = 0b1111, 8 = 0b11111111
+            uint32 height_as_mask = (height == 32) ? 0xFFFFFFFF : ((1u << height) - 1);
+            uint32 mask = height_as_mask << y;
+
+            uint32 width = 1;
+            // grow horizontally
+            while (row + width < 32) {
+                // fetch bits spanning height in next row
+                uint32 next_row_height = (data[row + width] >> y) & height_as_mask;
+                if (next_row_height != height_as_mask) {
+                    break; // can't expand further
+                }
+
+                // remove bits we expanded into as each face can only be meshed once
+                data[row + width] &= ~mask;
+                width += 1;
+            }
+            greedy_quads.push_back(GreedyQuad{
+                ivec2(row, y),
+                width,
+                height
+                });
+
+            y += height;
+        }
+    }
+    return greedy_quads;
+}
+
+std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, const uint8* voxelData, ivec3 chunk_offset)
+{
+    std::vector<uint32> vertices;
+    for (int32 axis = 0; axis < chunk_size; axis++)
+    {
+        for (int32 color = 1; color <= 255; color++) {
+            // create binary grid
+            std::array<uint32, 32> x_data{};
+
+            for (int32 i = 0; i < chunk_size * chunk_size; i++)
+            {
+                uint32 row = i % chunk_size;
+                uint32 column = (i / chunk_size);
+                ivec3 pos = worldToSample(dir, axis, row, column) + chunk_offset;
+                uint8 current = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
+                uint8 neg_z = getVoxelInNegDir(dir, voxelData, pos.x, pos.y, pos.z, instanceDimensions);
+
+                if (current != color) continue;
+
+                bool is_solid = current != 0 && neg_z == 0;
+                x_data[row] = ((1 << column) * uint32(is_solid)) | x_data[row];
+            }
+            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(x_data);
+            for (GreedyQuad quad : quads_from_axis)
+            {
+                appendVertices(vertices, dir, axis, color, quad);
+            }
+        }
+    }
+
+    return vertices;
 }
 
 ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
@@ -376,7 +375,6 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
             meshes.push_back(new_mesh);
         }
     }
-
 }
 
 void VoxInstance::render(Shader& shader, mat4& mvp)
@@ -386,13 +384,10 @@ void VoxInstance::render(Shader& shader, mat4& mvp)
         shader.setMat4("mvp", mvp * mesh.transform);
 
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mesh.vertexSSBO);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mesh.ibo);
 
         glBindVertexArray(mesh.vao);
-        //glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommand);
         glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
     }
-    
 
     glBindVertexArray(0);
 }

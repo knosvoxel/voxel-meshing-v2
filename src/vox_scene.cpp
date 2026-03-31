@@ -70,6 +70,7 @@ void VoxScene::load(const char* path)
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 
+	std::cout << "Meshing instance... " << std::endl;
 	// staging buffer size calculation based on which model is the biggest in the scene
 	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
 	//int32 maxSize = 0;
@@ -121,6 +122,8 @@ void VoxScene::load(const char* path)
 	timer.start();
 	for (size_t i = 0; i < numInstances; i++)
 	{
+		std::cout << i << " ";
+
 		Timer local;
 		local.start();
 		const ogt_vox_instance* currInstance = &voxScene->instances[i];
@@ -173,7 +176,7 @@ void VoxScene::load(const char* path)
 	}
 	timer.stop();
 
-	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
+	std::cout << "\nAverage instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
 
 	std::cout << "Meshing Loop Duration total: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
 
