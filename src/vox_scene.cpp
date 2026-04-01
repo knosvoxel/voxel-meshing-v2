@@ -139,19 +139,11 @@ void VoxScene::load(const char* path)
 
 		float64 rotPre = local.elapsedMilliseconds();
 		
-		// created rotated model with CPU or GPU
-		// CPU is more similar to ray marching version
-		uint32 rotatedModelSSBO = 0;
+		// created rotated model with CPU
 		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
-		glCreateBuffers(1, &rotatedModelSSBO);
-		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x* rotatedModelSize.y* rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
 
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
 		rotationComputeDurationTotal += rotationDuration;
-
-		//InstanceData instanceData;
-		//instanceData.modelSize = rotatedModelSize;
-		//instanceData.worldOffset = instanceOffset;
 
 		instances.emplace_back();
 		local.stop();
@@ -213,7 +205,6 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	shader.use();
 	shader.setInt("palette", 0);
 	shader.setVec3("light_direction", -0.45f, -0.7f, -0.2f);
-	//shader.setMat4("mvp", mvp);
 
 	for (VoxInstance& instance : instances) {
 		instance.render(shader, mvp);

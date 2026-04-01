@@ -1,37 +1,15 @@
 #include "vox_instance.h"
 
-static inline uint8 getVoxel(const uint8* voxels, int32 x, int32 y, int32 z, const ivec3& size) 
-{
-    if (x < 0 || y < 0 || z < 0 ||
-        x >= size.x || y >= size.y || z >= size.z)
-        return 0; // treat out-of-bounds as air
-    return voxels[x + y * size.x + z * size.x * size.y];
-}
-
 static inline int32 negateAxis(FaceDirection& dir) {
     switch (dir)
     {
-    case FaceDirection::UP:
-        return 1;
-        break;
-    case FaceDirection::DOWN:
-        return 0;
-        break;
-    case FaceDirection::LEFT:
-        return 0;
-        break;
-    case FaceDirection::RIGHT:
-        return 1;
-        break;
-    case FaceDirection::FORWARD:
-        return 0;
-        break;
-    case FaceDirection::BACK:
-        return 1;
-        break;
-    default:
-        return -1;
-        break;
+    case FaceDirection::UP: return 1; break;
+    case FaceDirection::DOWN: return 0; break;
+    case FaceDirection::LEFT: return 0; break;
+    case FaceDirection::RIGHT: return 1; break;
+    case FaceDirection::FORWARD: return 0; break;
+    case FaceDirection::BACK: return 1; break;
+    default: return -1; break;
     }
 }
 
@@ -39,21 +17,13 @@ static ivec3 worldToSample(FaceDirection dir, int32 axis, int32 x, int32 y)
 {
     switch (dir)
     {
-    case FaceDirection::UP:
-    case FaceDirection::DOWN:
-        return ivec3(x, axis, y);
-        break;
-    case FaceDirection::LEFT:
-    case FaceDirection::RIGHT:
-        return ivec3(axis, y, x);
-        break;
-    case FaceDirection::FORWARD:
-    case FaceDirection::BACK:
-        return ivec3(x, y, axis);
-        break;
-    default:
-        return ivec3(-1);
-        break;
+    case FaceDirection::UP: case FaceDirection::DOWN:
+        return ivec3(x, axis, y); break;
+    case FaceDirection::LEFT: case FaceDirection::RIGHT:
+        return ivec3(axis, y, x); break;
+    case FaceDirection::FORWARD: case FaceDirection::BACK:
+        return ivec3(x, y, axis); break;
+    default: return ivec3(-1); break;
     }
 }
 
@@ -61,54 +31,35 @@ static uint32 getNormalIndex(FaceDirection dir)
 {
     switch (dir)
     {
-    case FaceDirection::UP:
-        return 5;
-        break;
-    case FaceDirection::DOWN:
-        return 4;
-        break;
-    case FaceDirection::LEFT:
-        return 0;
-        break;
-    case FaceDirection::RIGHT:
-        return 1;
-        break;
-    case FaceDirection::FORWARD:
-        return 2;
-        break;
-    case FaceDirection::BACK:
-        return 3;
-        break;
-    default:
-        return -1;
-        break;
+    case FaceDirection::UP: return 5; break;
+    case FaceDirection::DOWN: return 4; break;
+    case FaceDirection::LEFT: return 0; break;
+    case FaceDirection::RIGHT: return 1; break;
+    case FaceDirection::FORWARD: return 2; break;
+    case FaceDirection::BACK: return 3; break;
+    default: return -1; break;
     }
 }
 
 static bool isReverseOrder(FaceDirection dir) {
     switch (dir)
     {
-    case FaceDirection::UP:
-        return true;
-        break;
-    case FaceDirection::DOWN:
-        return false;
-        break;
-    case FaceDirection::LEFT:
-        return false;
-        break;
-    case FaceDirection::RIGHT:
-        return true;
-        break;
-    case FaceDirection::FORWARD:
-        return true;
-        break;
-    case FaceDirection::BACK:
-        return false;
-        break;
-    default:
-        break;
+    case FaceDirection::UP: return true; break;
+    case FaceDirection::DOWN: return false; break;
+    case FaceDirection::LEFT: return false; break;
+    case FaceDirection::RIGHT: return true; break;
+    case FaceDirection::FORWARD: return true; break;
+    case FaceDirection::BACK: return false;break;
+    default: break;
     }
+}
+
+static inline uint8 getVoxel(const uint8* voxels, int32 x, int32 y, int32 z, const ivec3& size)
+{
+    if (x < 0 || y < 0 || z < 0 ||
+        x >= size.x || y >= size.y || z >= size.z)
+        return 0; // treat out-of-bounds as air
+    return voxels[x + y * size.x + z * size.x * size.y];
 }
 
 static inline uint32 makeVertex(ivec3 pos, uint32 normal, uint8 color) {
