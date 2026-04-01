@@ -152,29 +152,29 @@ std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
     return indices;
 }
 
-std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& data)
+std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data)
 {
     std::vector<GreedyQuad> greedy_quads;
-    for (int32 row = 0; row < data.size(); row++)
+    for (int32 row = 0; row < CHUNK_SIZE; row++)
     {
-        uint32 y = 0;
-        while (y < 32) {
+        uint64 y = 0;
+        while (y < CHUNK_SIZE) {
             // count trailing zero bits to find first solid voxel
             y += std::countr_zero(data[row] >> y);
-            if (y >= 32) break;
+            if (y >= CHUNK_SIZE) break;
 
-            uint32 height = std::countr_one(data[row] >> y);
+            uint64 height = std::countr_one(data[row] >> y);
 
             // convert height value to equal amount of positive bits:
             // e.g. 1 = 0b1, 2 = 0b11, 4 = 0b1111, 8 = 0b11111111
-            uint32 height_as_mask = (height == 32) ? 0xFFFFFFFF : ((1u << height) - 1);
-            uint32 mask = height_as_mask << y;
+            uint64 height_as_mask = (height == CHUNK_SIZE_P) ? 0xFFFFFFFFFFFFFFFFull : ((1ull << height) - 1ull);
+            uint64 mask = height_as_mask << y;
 
-            uint32 width = 1;
+            uint64 width = 1;
             // grow horizontally
-            while (row + width < 32) {
+            while (row + width < CHUNK_SIZE) {
                 // fetch bits spanning height in next row
-                uint32 next_row_height = (data[row + width] >> y) & height_as_mask;
+                uint64 next_row_height = (data[row + width] >> y) & height_as_mask;
                 if (next_row_height != height_as_mask) {
                     break; // can't expand further
                 }
@@ -185,8 +185,8 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
             }
             greedy_quads.push_back(GreedyQuad{
                 ivec2(row, y),
-                width,
-                height
+                (uint32)width,
+                (uint32)height
                 });
 
             y += height;
@@ -232,8 +232,8 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
     }
 
     // greedy meshing planes for every axis (6 directions)
-    // key(color) -> unordered_map<axis(0 - 32), binary_plane(32 x 32 bits)>
-    std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint32, 32>>> data[6];
+    // key(color) -> unordered_map<axis(0 - 32), binary_plane(CHUNK_SIZE x CHUNK_SIZE bits)>
+    std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint64, CHUNK_SIZE>>> data[6];
 
     // find faces and build binary planes based on the voxel color in y direction
     for (int32 axis = 0; axis < 6; axis++)
@@ -267,7 +267,7 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
 
             uint8 current_voxel_col = getVoxel(voxelData, voxel_pos.x, voxel_pos.y, voxel_pos.z, instanceDimensions);
 
-            data[axis][current_voxel_col][y][x] |= 1u << z;
+            data[axis][current_voxel_col][y][x] |= 1ull << z;
         } 
     }
 
@@ -369,7 +369,7 @@ void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
         }
 
         if (!local.is_empty) {
-            local.worldTransform = translate(mat4(1.0f), vec3(worldOffset) + vec3(cx, cy, cz) * 32.0f - vec3(floor(instanceDimensions.x / 2.0), floor(instanceDimensions.y / 2.0), floor(instanceDimensions.z / 2.0)));
+            local.worldTransform = translate(mat4(1.0f), vec3(worldOffset) + vec3(cx, cy, cz) * float32(CHUNK_SIZE) - vec3(floor(instanceDimensions.x / 2.0), floor(instanceDimensions.y / 2.0), floor(instanceDimensions.z / 2.0)));
 
             local.chunk_offset = ivec3(cx, cy, cz) * CHUNK_SIZE;
 

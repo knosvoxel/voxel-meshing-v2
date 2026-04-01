@@ -18,6 +18,11 @@
 
 using namespace glm;
 
+static const int32 CHUNK_SIZE = 62;
+static const int32 CHUNK_SIZE_P = CHUNK_SIZE + 2;
+static const int32 CHUNK_SIZE_P2 = CHUNK_SIZE_P * CHUNK_SIZE_P;
+static const int32 CHUNK_SIZE_P3 = CHUNK_SIZE_P * CHUNK_SIZE_P * CHUNK_SIZE_P;
+
 enum class FaceDirection {
 	UP,
 	DOWN,
@@ -55,7 +60,7 @@ struct GreedyQuad {
 struct Chunk {
 	mat4 worldTransform;
 	
-	static constexpr int32 sizeXZ = 32, sizeY = 32;
+	static constexpr int32 sizeXZ = CHUNK_SIZE, sizeY = CHUNK_SIZE;
 	static constexpr int32 num_voxels = sizeXZ * sizeXZ * sizeY;
 
 	bool is_empty = true;
@@ -106,7 +111,7 @@ struct VoxInstance {
 
 	std::vector<uint32> generateIndices(size_t vertex_count);
 	
-	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
+	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data);
 
 	ChunkMesh generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset);
 	
@@ -128,11 +133,6 @@ struct VoxInstance {
 	ivec3 instanceDimensions;
 	ivec3 sizeInChunks;
 	ivec3 worldOffset;
-
-	static const int32 CHUNK_SIZE = 32;
-	static const int32 CHUNK_SIZE_P = CHUNK_SIZE + 2;
-	static const int32 CHUNK_SIZE_P2 = CHUNK_SIZE_P * CHUNK_SIZE_P;
-	static const int32 CHUNK_SIZE_P3 = CHUNK_SIZE_P * CHUNK_SIZE_P * CHUNK_SIZE_P;
 
 	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
