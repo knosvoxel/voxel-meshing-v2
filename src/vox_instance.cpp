@@ -119,21 +119,18 @@ static inline uint32 makeVertex(ivec3 pos, uint32 normal, uint8 color) {
         | (uint32(color) << 22);
 }
 
-static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color, GreedyQuad& quad) {
-    int32 negated_axis = negateAxis(dir);
-    axis = axis + negated_axis;
+static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color, uint32 normal_idx, bool is_reverse, GreedyQuad& quad) {
+    uint32 v1 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y), normal_idx, color);
+    uint32 v2 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y), normal_idx, color);
+    uint32 v3 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y + quad.height), normal_idx, color);
+    uint32 v4 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y + quad.height), normal_idx, color);
 
-    uint32 v1 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y), getNormalIndex(dir), color);
-    uint32 v2 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y), getNormalIndex(dir), color);
-    uint32 v3 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y + quad.height), getNormalIndex(dir), color);
-    uint32 v4 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y + quad.height), getNormalIndex(dir), color);
+    uint32 new_vertices[4] = { v1, v2, v3, v4 };
 
-    std::deque<uint32> new_vertices = { v1, v2, v3, v4 };
-
-    if (isReverseOrder(dir)) {
-        std::reverse(new_vertices.begin() + 1, new_vertices.end());
+    if (is_reverse) {
+        std::swap(new_vertices[1], new_vertices[3]);
     }
-    vertices.insert(vertices.end(), new_vertices.begin(), new_vertices.end());
+    vertices.insert(vertices.end(), new_vertices, new_vertices + 4);
 }
 
 std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
@@ -166,6 +163,7 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
             y += std::countr_zero(data[row] >> y);
             if (y >= 32) break;
 
+            // measure height of the face
             uint32 height = std::countr_one(data[row] >> y);
 
             // convert height value to equal amount of positive bits:
@@ -202,9 +200,9 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
 {
     ChunkMesh mesh{};
     // solid voxels as binary for each x, y, z axis
-    std::vector<uint64> axis_cols(3 * CHUNK_SIZE_P3, 0);
+    std::vector<uint64> axis_cols(3 * CHUNK_SIZE_P2, 0);
     // cull mask to perform greedy slicing on, based on solids from axis_cols
-    std::vector<uint64> col_face_masks(3 * CHUNK_SIZE_P3 * 2, 0); // TODO: does this have to be uint64 or is uint8 sufficient?
+    std::vector<uint64> col_face_masks(3 * CHUNK_SIZE_P2 * 2, 0); // TODO: does this have to be uint64 or is uint8 sufficient?
 
     // binary representation for every solid voxel in y,x,z axis
     for (int32 y = 0; y < CHUNK_SIZE_P; y++)
@@ -236,12 +234,17 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
 
     // greedy meshing planes for every axis (6 directions)
     // key(color) -> unordered_map<axis(0 - 32), binary_plane(32 x 32 bits)>
-    std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint32, 32>>> data[6];
+    //std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint32, 32>>> data[6];
+    std::array<std::vector<FaceEntry>, 6> face_lists;
+    for (auto& list : face_lists)
+    {
+        list.reserve(CHUNK_SIZE * CHUNK_SIZE);
+    }
 
     // find faces and build binary planes based on the voxel color in y direction
     for (int32 axis = 0; axis < 6; axis++)
-    for (int z = 0; z < CHUNK_SIZE; z++)
-    for (int x = 0; x < CHUNK_SIZE; x++)
+    for (int32 z = 0; z < CHUNK_SIZE; z++)
+    for (int32 x = 0; x < CHUNK_SIZE; x++)
     {
         // skip padding by adding + 1 to x & z
         int32 col_idx = 1 + x + ((z + 1) * CHUNK_SIZE_P) + CHUNK_SIZE_P2 * axis;
@@ -261,24 +264,17 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
 
             switch (axis)
             {
-            case 0:
-            case 1:
-                voxel_pos = ivec3(x, y, z); // down, up
-                break;
-            case 2:
-            case 3:
-                voxel_pos = ivec3(y, z, x); // left, right
-                break;
-            default:
-                voxel_pos = ivec3(x, z, y); // forward, back
-                break;
+            case 0: case 1: voxel_pos = ivec3(x, y, z); break; // down, up
+            case 2: case 3: voxel_pos = ivec3(y, z, x); break; // left, right
+            default: voxel_pos = ivec3(x, z, y); break; // forward, back
             }
             
             voxel_pos += chunk_offset;
 
             uint8 current_voxel_col = getVoxel(voxelData, voxel_pos.x, voxel_pos.y, voxel_pos.z, instanceDimensions);
 
-            data[axis][current_voxel_col][y][x] |= 1u << z;
+            //data[axis][current_voxel_col][y][x] |= 1u << z;
+            face_lists[axis].push_back( FaceEntry{current_voxel_col, (uint8)x, (uint8)y, (uint8)z} );
         } 
     }
 
@@ -287,37 +283,54 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
         FaceDirection face_dir;
         switch (axis)
         {
-        case 0: 
-            face_dir = FaceDirection::DOWN;
-            break;
-        case 1:
-            face_dir = FaceDirection::UP;
-            break;
-        case 2:
-            face_dir = FaceDirection::LEFT;
-            break;
-        case 3:
-            face_dir = FaceDirection::RIGHT;
-            break;
-        case 4:
-            face_dir = FaceDirection::FORWARD;
-            break;
-        default:
-            face_dir = FaceDirection::BACK;
-            break;
+        case 0: face_dir = FaceDirection::DOWN; break;
+        case 1: face_dir = FaceDirection::UP; break;
+        case 2: face_dir = FaceDirection::LEFT; break;
+        case 3: face_dir = FaceDirection::RIGHT; break;
+        case 4: face_dir = FaceDirection::FORWARD; break;
+        default: face_dir = FaceDirection::BACK; break;
         }
 
-        auto& color_data = data[axis];
+        uint32 normal_idx = getNormalIndex(face_dir);
+        bool is_reverse = isReverseOrder(face_dir);
+        int32 negated_axis = negateAxis(face_dir);
 
-        for (auto& [color, axis_plane] : color_data)
-        for (auto& [axis_pos, plane] : axis_plane)
+        auto& faces = face_lists[axis];
+
+        // sort by (color, y, x)
+        std::sort(faces.begin(), faces.end(), [](const FaceEntry& a, const FaceEntry& b) {
+            if (a.color != b.color) return a.color < b.color;
+            if (a.y != b.y) return a.y < b.y;
+            return a.x < b.x;
+        });
+
+        size_t i = 0;
+        while (i < faces.size())
         {
-            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(plane);
+            uint8 curr_col = faces[i].color;
+            uint8 curr_slice = faces[i].y;
 
-            for (GreedyQuad& quad : quads_from_axis)
+            std::array<uint32, 32> plane{};
+
+            // build binary plane for current color
+            size_t j = i;
+            while (j < faces.size() && faces[j].color == curr_col && faces[j].y == curr_slice)
             {
-                appendVertices(vertices, face_dir, axis_pos, color, quad);
+                plane[faces[j].x] |= 1u << faces[j].z;
+                j++;
             }
+
+            // mesh plane for current color
+            std::vector<GreedyQuad> quads = meshBinaryPlane(plane);
+            for (GreedyQuad& quad : quads)
+            {
+                uint32 curr_slice_adjusted = curr_slice + negated_axis;
+
+                appendVertices(vertices, face_dir, curr_slice_adjusted, curr_col, normal_idx, is_reverse, quad);
+            }
+
+            i = j; // move on to next color
+
         }
     }
 
