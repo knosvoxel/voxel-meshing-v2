@@ -8,38 +8,6 @@ static inline uint8 getVoxel(const uint8* voxels, int32 x, int32 y, int32 z, con
     return voxels[x + y * size.x + z * size.x * size.y];
 }
 
-static inline uint8 getVoxelInNegDir(FaceDirection dir, const uint8* voxels, int32 x, int32 y, int32 z, const ivec3& size)
-{
-    ivec3 offset;
-
-    switch (dir)
-    {
-    case FaceDirection::UP:
-        offset = ivec3(0, 1, 0);
-        break;
-    case FaceDirection::DOWN:
-        offset = ivec3(0, -1, 0);
-        break;
-    case FaceDirection::LEFT:
-        offset = ivec3(-1, 0, 0);
-        break;
-    case FaceDirection::RIGHT:
-        offset = ivec3(1, 0, 0);
-        break;
-    case FaceDirection::FORWARD:
-        offset = ivec3(0, 0, -1);
-        break;
-    case FaceDirection::BACK:
-        offset = ivec3(0, 0, 1);
-        break;
-    default:
-        offset = ivec3(-1, -1, -1);
-        break;
-    }
-
-    return getVoxel(voxels, x + offset.x, y + offset.y, z + offset.z, size);
-}
-
 static inline int32 negateAxis(FaceDirection& dir) {
     switch (dir)
     {
@@ -230,59 +198,130 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint32, 32>& dat
     return greedy_quads;
 }
 
-std::vector<uint32> VoxInstance::generateVerticesFromFace(FaceDirection dir, const uint8* voxelData, ivec3 chunk_offset)
+ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
 {
-    std::vector<uint32> vertices;
-    for (int32 axis = 0; axis < chunk_size; axis++)
+    ChunkMesh mesh{};
+    // solid voxels as binary for each x, y, z axis
+    std::vector<uint64> axis_cols(3 * CHUNK_SIZE_P3, 0);
+    // cull mask to perform greedy slicing on, based on solids from axis_cols
+    std::vector<uint64> col_face_masks(3 * CHUNK_SIZE_P3 * 2, 0); // TODO: does this have to be uint64 or is uint8 sufficient?
+
+    // binary representation for every solid voxel in y,x,z axis
+    for (int32 y = 0; y < CHUNK_SIZE_P; y++)
+    for (int32 z = 0; z < CHUNK_SIZE_P; z++)
+    for (int32 x = 0; x < CHUNK_SIZE_P; x++)
     {
-        for (int32 color = 1; color <= 255; color++) {
-            // create binary grid
-            std::array<uint32, 32> x_data{};
+        ivec3 pos = ivec3(x, y, z) + chunk_offset - ivec3(1);
+        uint8 col = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
+        if (col != 0) {
+            // x,z : y axis
+            axis_cols[x + (z * CHUNK_SIZE_P)] |= 1ull << uint64(y);
+            // z,y : x axis
+            axis_cols[z + (y * CHUNK_SIZE_P) + CHUNK_SIZE_P2] |= 1ull << uint64(x);
+            // x,y : z axis
+            axis_cols[x + (y * CHUNK_SIZE_P) + CHUNK_SIZE_P2 * 2] |= 1ull << uint64(z);
+        }
+    }
 
-            for (int32 i = 0; i < chunk_size * chunk_size; i++)
+    // face culling
+    for (int32 axis = 0; axis < 3; axis++) 
+    for (int32 i = 0; i < CHUNK_SIZE_P2; i++)
+    {
+        uint64 col = axis_cols[(CHUNK_SIZE_P2 * axis) + i];
+        // sample ascending axis, set true if air meets solid
+        col_face_masks[(CHUNK_SIZE_P2 * (axis * 2 + 1)) + i] = col & ~(col >> 1);
+        // sample descending axis, set true if air meets solid
+        col_face_masks[(CHUNK_SIZE_P2 * (axis * 2 + 0)) + i] = col & ~(col << 1);
+    }
+
+    // greedy meshing planes for every axis (6 directions)
+    // key(color) -> unordered_map<axis(0 - 32), binary_plane(32 x 32 bits)>
+    std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint32, 32>>> data[6];
+
+    // find faces and build binary planes based on the voxel color in y direction
+    for (int32 axis = 0; axis < 6; axis++)
+    for (int z = 0; z < CHUNK_SIZE; z++)
+    for (int x = 0; x < CHUNK_SIZE; x++)
+    {
+        // skip padding by adding + 1 to x & z
+        int32 col_idx = 1 + x + ((z + 1) * CHUNK_SIZE_P) + CHUNK_SIZE_P2 * axis;
+
+        // removes the right most padding value, because it's outside of the chunk/ not meshed
+        uint64 col = col_face_masks[col_idx] >> 1;
+        // removes the left most padding value, because it's outside of the chunk/ not meshed
+        col = col & ~(1ull << uint64(CHUNK_SIZE));
+
+        // fetch face positions
+        while (col != 0) {
+            int32 y = std::countr_zero(col);
+            // clear least significant set bit
+            col &= col - 1;
+
+            ivec3 voxel_pos = {};
+
+            switch (axis)
             {
-                uint32 row = i % chunk_size;
-                uint32 column = (i / chunk_size);
-                ivec3 pos = worldToSample(dir, axis, row, column) + chunk_offset;
-                uint8 current = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
-                uint8 neg_z = getVoxelInNegDir(dir, voxelData, pos.x, pos.y, pos.z, instanceDimensions);
-
-                if (current != color) continue;
-
-                bool is_solid = current != 0 && neg_z == 0;
-                x_data[row] = ((1 << column) * uint32(is_solid)) | x_data[row];
+            case 0:
+            case 1:
+                voxel_pos = ivec3(x, y, z); // down, up
+                break;
+            case 2:
+            case 3:
+                voxel_pos = ivec3(y, z, x); // left, right
+                break;
+            default:
+                voxel_pos = ivec3(x, z, y); // forward, back
+                break;
             }
-            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(x_data);
-            for (GreedyQuad quad : quads_from_axis)
+            
+            voxel_pos += chunk_offset;
+
+            uint8 current_voxel_col = getVoxel(voxelData, voxel_pos.x, voxel_pos.y, voxel_pos.z, instanceDimensions);
+
+            data[axis][current_voxel_col][y][x] |= 1u << z;
+        } 
+    }
+
+    std::vector<uint32> vertices;
+    for (int32 axis = 0; axis < 6; axis++) {
+        FaceDirection face_dir;
+        switch (axis)
+        {
+        case 0: 
+            face_dir = FaceDirection::DOWN;
+            break;
+        case 1:
+            face_dir = FaceDirection::UP;
+            break;
+        case 2:
+            face_dir = FaceDirection::LEFT;
+            break;
+        case 3:
+            face_dir = FaceDirection::RIGHT;
+            break;
+        case 4:
+            face_dir = FaceDirection::FORWARD;
+            break;
+        default:
+            face_dir = FaceDirection::BACK;
+            break;
+        }
+
+        auto& color_data = data[axis];
+
+        for (auto& [color, axis_plane] : color_data)
+        for (auto& [axis_pos, plane] : axis_plane)
+        {
+            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(plane);
+
+            for (GreedyQuad& quad : quads_from_axis)
             {
-                appendVertices(vertices, dir, axis, color, quad);
+                appendVertices(vertices, face_dir, axis_pos, color, quad);
             }
         }
     }
 
-    return vertices;
-}
-
-ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
-{
-    ChunkMesh mesh{};
-    std::vector<uint32> quads{};
-
-    std::vector<uint32> up_quads = generateVerticesFromFace(FaceDirection::UP, voxelData, chunk_offset);
-    std::vector<uint32> down_quads = generateVerticesFromFace(FaceDirection::DOWN, voxelData, chunk_offset);
-    std::vector<uint32> left_quads = generateVerticesFromFace(FaceDirection::LEFT, voxelData, chunk_offset);
-    std::vector<uint32> right_quads = generateVerticesFromFace(FaceDirection::RIGHT, voxelData, chunk_offset);
-    std::vector<uint32> forward_quads = generateVerticesFromFace(FaceDirection::FORWARD, voxelData, chunk_offset);
-    std::vector<uint32> back_quads = generateVerticesFromFace(FaceDirection::BACK, voxelData, chunk_offset);
-    
-    quads.insert(quads.end(), up_quads.begin(), up_quads.end());
-    quads.insert(quads.end(), down_quads.begin(), down_quads.end());
-    quads.insert(quads.end(), left_quads.begin(), left_quads.end());
-    quads.insert(quads.end(), right_quads.begin(), right_quads.end());
-    quads.insert(quads.end(), forward_quads.begin(), forward_quads.end());
-    quads.insert(quads.end(), back_quads.begin(), back_quads.end());
-    
-    mesh.vertices.insert(mesh.vertices.end(), quads.begin(), quads.end());
+    mesh.vertices.insert(mesh.vertices.end(), vertices.begin(), vertices.end());
 
     uint32 vertexSSBO;
     uint32 ibo;
@@ -331,7 +370,7 @@ void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
         for (int32 lz = 0; lz < local.sizeXZ; lz++)
         for (int32 lx = 0; lx < local.sizeXZ; lx++)
         {
-            ivec3 voxel_pos = ivec3(cx, cy, cz) * chunk_size + ivec3(lx, ly, lz);
+            ivec3 voxel_pos = ivec3(cx, cy, cz) * CHUNK_SIZE + ivec3(lx, ly, lz);
 
             if (voxel_pos.x >= instanceDimensions.x ||
                 voxel_pos.y >= instanceDimensions.y ||
@@ -349,7 +388,7 @@ void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
         if (!local.is_empty) {
             local.worldTransform = translate(mat4(1.0f), vec3(worldOffset) + vec3(cx, cy, cz) * 32.0f - vec3(floor(instanceDimensions.x / 2.0), floor(instanceDimensions.y / 2.0), floor(instanceDimensions.z / 2.0)));
 
-            local.chunk_offset = ivec3(cx, cy, cz) * chunk_size;
+            local.chunk_offset = ivec3(cx, cy, cz) * CHUNK_SIZE;
 
             int32 idx = getPoolIndex(cx, cy, cz);
             data[idx] = std::make_unique<Chunk>(local);
@@ -363,13 +402,14 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     this->voxelData = voxelData;
     this->worldOffset = worldOffset;
 
-    sizeInChunks = ivec3((instanceDimensions + chunk_size - 1) / chunk_size);
+    sizeInChunks = ivec3((instanceDimensions + CHUNK_SIZE - 1) / CHUNK_SIZE);
     // worldTransform = 
 
     generateChunks(chunkData);
 
     for (auto& chunk : chunkData) {
         if (chunk != nullptr) {
+            //ChunkMesh new_mesh = generateChunkMesh(chunk->voxel_data, chunk->chunk_offset);
             ChunkMesh new_mesh = generateChunkMesh(chunk->voxel_data, chunk->chunk_offset);
             new_mesh.transform = chunk->worldTransform;
             meshes.push_back(new_mesh);

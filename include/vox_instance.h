@@ -7,6 +7,7 @@
 #include <bit>
 #include <deque>
 #include <memory>
+#include <unordered_map>
 
 #include <ext/matrix_transform.hpp>
 
@@ -104,11 +105,13 @@ struct VoxInstance {
 	}
 
 	std::vector<uint32> generateIndices(size_t vertex_count);
+	
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint32, 32>& data);
-	std::vector<uint32> generateVerticesFromFace(FaceDirection dir, const uint8* voxelData, ivec3 chunk_offset);
 
 	ChunkMesh generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset);
+	
 	void generateChunks(std::vector<std::unique_ptr<Chunk>>& data);
+
 	void generateInstanceMesh(const uint8* voxelData, vec3 modelSize,
 	vec3 worldOffset, MeasurementData& measurements);
 
@@ -126,7 +129,10 @@ struct VoxInstance {
 	ivec3 sizeInChunks;
 	ivec3 worldOffset;
 
-	static const int32 chunk_size = 32;
+	static const int32 CHUNK_SIZE = 32;
+	static const int32 CHUNK_SIZE_P = CHUNK_SIZE + 2;
+	static const int32 CHUNK_SIZE_P2 = CHUNK_SIZE_P * CHUNK_SIZE_P;
+	static const int32 CHUNK_SIZE_P3 = CHUNK_SIZE_P * CHUNK_SIZE_P * CHUNK_SIZE_P;
 
 	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
