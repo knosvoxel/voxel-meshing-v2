@@ -5,9 +5,9 @@
 #include <vector>
 #include <array>
 #include <bit>
+#include <deque>
 #include <memory>
 #include <unordered_map>
-#include <algorithm>
 
 #include <ext/matrix_transform.hpp>
 
@@ -25,13 +25,6 @@ enum class FaceDirection {
 	RIGHT,
 	FORWARD,
 	BACK
-};
-
-struct FaceEntry {
-	uint8 color;
-	uint8 x;
-	uint8 y; // axis-varying dimension greedy slice index
-	uint8 z;
 };
 
 typedef struct MeasurementData {
