@@ -71,58 +71,39 @@ void VoxScene::load(const char* path)
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 
 	std::cout << "Meshing instance... " << std::endl;
-	// staging buffer size calculation based on which model is the biggest in the scene
-	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
-	//int32 maxSize = 0;
-	//for (size_t i = 0; i < voxScene->num_models; i++) {
-	//	const ogt_vox_model* currModel = voxScene->models[i];
-
-	//	int32 currX = (currModel->size_x + 1) >> 1;
-	//	int32 currY = currModel->size_y;
-	//	int32 currZ = currModel->size_z;
-
-	//	int32 currSize = currX * currY * currZ;
-
-	//	if (currSize > maxSize) maxSize = currSize;
-	//}
-
-	// 24 vertices per voxel max, 4 on each side
-	//const uint32 maxVertices = maxSize * 6 * 4;
-	//const uint32 maxIndices = maxSize * 6 * 6;
-	//const uint32 maxFaces = maxSize * 6;
-
-	//std::vector<Vertex> stagingVertices(maxVertices);
-	//std::vector<uint32> stagingIndices(maxIndices);
-	//std::vector<uint32> stagingPacked(maxFaces);
-	//DrawElementsIndirectCommand stagingIndirect{};
-
-	//MeshBuffers buffer;
-	//buffer.vertices = stagingVertices.data();
-	//buffer.indices = stagingIndices.data();
-	//buffer.packedData = stagingPacked.data();
-	//buffer.indirectCommand = &stagingIndirect;
 
 	// DEBUG INFORMATION //
 	uint64 totalSizeX = 0;
 	uint64 totalSizeY = 0;
 	uint64 totalSizeZ = 0;
 
-	float64 dispatchPreTotal = 0.0;
-	float64 dispatchPostTotal = 0.0;
 	float64 meshingDurationTotal = 0.0;
 	float64 meshingDurationMin = DBL_MAX;
 	float64 meshingDurationMax = 0.0;
 
-	float64 forPreGenerate = 0.0;
-	float64 forPostGenerate = 0.0;
+	float64 meshPreTotal = 0.0;
+	float64 meshInstanceChunksTotal = 0.0;
+	float64 meshPostTotal = 0.0;
 
-	float64 rotationComputeDurationTotal = 0.0;
+	float64 forPreGenerate = 0.0;
+
 	float64 rotationDurationTotal = 0.0;
+
+	// Chunks
+	uint32 chunk_count = 0;
+	float64 chunkTotalOccupancyMask = 0.0;
+	float64 chunkTotalFaceCulling = 0.0;
+	float64 chunkTotalMeshing = 0.0;
+
 	////////////////////////
 	timer.start();
+
+
 	for (size_t i = 0; i < numInstances; i++)
 	{
 		std::cout << i << " ";
+		
+		measurements = MeasurementData{};
 
 		Timer local;
 		local.start();
@@ -143,53 +124,70 @@ void VoxScene::load(const char* path)
 		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
 
 		rotationDurationTotal += (local.elapsedMilliseconds() - rotPre);
-		rotationComputeDurationTotal += rotationDuration;
 
 		instances.emplace_back();
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
 		instances.back().generateInstanceMesh(rotatedModelData, rotatedModelSize, instanceOffset, measurements);
 
-		local.start();
-		dispatchPreTotal += measurements.dispatchPre;
-		dispatchPostTotal += measurements.dispatchPost;
+		meshPreTotal += measurements.meshPre;
+		meshInstanceChunksTotal += measurements.meshInstanceChunks;
+		meshPostTotal += measurements.meshPost;
+		meshingDurationTotal += measurements.meshTotal;
+		if (measurements.meshTotal < meshingDurationMin) meshingDurationMin = measurements.meshTotal;
+		if (measurements.meshTotal > meshingDurationMax) meshingDurationMax = measurements.meshTotal;
+
+		chunk_count += measurements.chunkCount;
+		total_vertices += measurements.vertexCount;
+
+		chunkTotalOccupancyMask += measurements.chunkMeasurements.occupancyMaskTotal;
+		chunkTotalFaceCulling += measurements.chunkMeasurements.faceCullingTotal;
+		chunkTotalMeshing += measurements.chunkMeasurements.meshingTotal;
 
 		totalSizeX += currModel->size_x;
 		totalSizeY += currModel->size_y;
 		totalSizeZ += currModel->size_z;
-
-		float64& dispatchDuration = measurements.meshGenerationDuration;
-		meshingDurationTotal += dispatchDuration;
-		if (dispatchDuration < meshingDurationMin) meshingDurationMin = dispatchDuration;
-		if (dispatchDuration > meshingDurationMax) meshingDurationMax = dispatchDuration;
-
-		local.stop();
-		forPostGenerate += local.elapsedMilliseconds();
 	}
+
 	timer.stop();
 
-	std::cout << "\nAverage instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
+	std::cout << "\n\nAmount of chunks: " << chunk_count << std::endl;
+
+	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << std::endl;
+	std::cout << "Average amount of chunks per instance: " << chunk_count / numInstances << "\n" << std::endl;
 
 	std::cout << "Meshing Loop Duration total: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
 
 
 	std::cout << "For loop pre generateMesh: " << forPreGenerate << "ms" << std::endl;
 	std::cout << " Rotation duration total: " << rotationDurationTotal << "ms" << std::endl;
-	std::cout << " Rotation compute duration total: " << rotationComputeDurationTotal / 1000.0 << "ms" << std::endl;
 
 	std::cout << "---------- generateMesh -------" << std::endl;
-	std::cout << " generateMesh pre  dispatch duration total: " << dispatchPreTotal << "ms\n" << std::endl;
-
 	double mean = meshingDurationTotal / numInstances;
-	std::cout << " Meshing Compute duration: " << std::endl;
-	std::cout << "  Total: " << meshingDurationTotal << "us (" << meshingDurationTotal / 1000.0 << "ms)" << std::endl;
-	std::cout << "  Average: " << mean << "us" << std::endl;
-	std::cout << "  Min: " << (meshingDurationMin) << "us" << std::endl;
-	std::cout << "  Max: " << (meshingDurationMax) << "us\n" << std::endl;
+	std::cout << " Meshing duration: " << std::endl;
+	std::cout << "  Total: " << meshingDurationTotal << "ms (" << meshingDurationTotal / 1000.0 << "s)" << std::endl;
+	std::cout << "  Average: " << mean << "ms" << std::endl;
+	std::cout << "  Min: " << (meshingDurationMin) << "ms" << std::endl;
+	std::cout << "  Max: " << (meshingDurationMax) << "ms\n" << std::endl;
 
-	std::cout << " generateMesh post dispatch duration total: " << dispatchPostTotal << "ms" << std::endl;
+	std::cout << "In Detail: " << std::endl;
+	std::cout << " chunk generation duration total: " << meshPreTotal << "ms" << std::endl;
+	std::cout << " average chunk generation duration: " << meshPreTotal / numInstances << "ms\n" << std::endl;
+	
+	std::cout << " meshing per instance total: " << meshInstanceChunksTotal << "ms" << std::endl;
+	std::cout << " meshing per instance average: " << meshInstanceChunksTotal / numInstances << "ms" << std::endl;
+	std::cout << " Per Chunks: " << std::endl;
+	std::cout << "  Occupancy mask generation total (wrong value): " << chunkTotalOccupancyMask << "ms" << std::endl;
+	std::cout << "  Occupancy mask generation average per chunk: " << chunkTotalOccupancyMask / chunk_count << "ms" << std::endl;
+	std::cout << "  Face culling total: " << chunkTotalFaceCulling << "ms" << std::endl;
+	std::cout << "  Face culling average per chunk: " << chunkTotalFaceCulling / chunk_count << "ms" << std::endl;
+	std::cout << "  Meshing from mask total: " << chunkTotalMeshing << "ms" << std::endl;
+	std::cout << "  Meshing from mask average per chunk: " << chunkTotalMeshing / chunk_count << "ms" << std::endl;
+	std::cout << std::endl;
+
+	std::cout << " instance buffer creation total: " << meshPostTotal << "ms" << std::endl;
+	std::cout << " instance buffer creation average: " << meshPostTotal / numInstances << "ms" << std::endl;
 	std::cout << "-------------------------------" << std::endl;
-	std::cout << "For loop post generateMesh: " << forPostGenerate << "ms\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
 

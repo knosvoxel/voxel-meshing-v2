@@ -127,8 +127,10 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint64, CHUNK_SI
     return greedy_quads;
 }
 
-ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset)
+ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements)
 {
+    Timer local;
+    local.start();
     ChunkMesh mesh{};
     // solid voxels as binary for each x, y, z axis
     std::vector<uint64> axis_cols(3 * CHUNK_SIZE_P2, 0);
@@ -152,6 +154,10 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         }
     }
 
+    local.stop();
+    chunk_measurements.occupancyMaskTotal += local.elapsedMilliseconds();
+
+    local.start();
     // face culling
     for (int32 axis = 0; axis < 3; axis++) 
     for (int32 i = 0; i < CHUNK_SIZE_P2; i++)
@@ -163,6 +169,10 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         col_face_masks[(CHUNK_SIZE_P2 * (axis * 2 + 0)) + i] = col & ~(col << 1);
     }
 
+    local.stop();
+    chunk_measurements.faceCullingTotal += local.elapsedMilliseconds();
+
+    local.start();
     // greedy meshing planes for every axis (6 directions)
     // key(color) -> unordered_map<axis(0 - 32), binary_plane(CHUNK_SIZE x CHUNK_SIZE bits)>
     std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint64, CHUNK_SIZE>>> data[6];
@@ -238,6 +248,9 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
 
     mesh.vertices.insert(mesh.vertices.end(), vertices.begin(), vertices.end());
 
+    local.stop();
+    chunk_measurements.meshingTotal += local.elapsedMilliseconds();
+
     return mesh;
 }
 
@@ -297,6 +310,9 @@ void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
 
 void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, vec3 worldOffset, MeasurementData& measurements)
 {
+    Timer timer, timerTotal;
+    timer.start();
+    timerTotal.start();
     instanceDimensions = ivec3(modelSize);
     this->voxelData = voxelData;
     this->worldOffset = worldOffset;
@@ -305,27 +321,53 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     // worldTransform = 
 
     generateChunks(chunkData);
+    
+    timer.stop();
+    measurements.meshPre += timer.elapsedMilliseconds();
+    measurements.chunkCount += chunkData.size();
 
+    timer.start();
     meshes.resize(chunkData.size());
+
+    std::vector<ChunkMeasurements> localMeasurements{};
+    localMeasurements.resize(chunkData.size());
 
 #pragma omp parallel for schedule(static)
     for (int32 i = 0; i < (int32)chunkData.size(); i++)
     {
         if (chunkData[i] != nullptr)
         {
-            meshes[i] = generateChunkMeshData(chunkData[i]->voxel_data, chunkData[i]->chunk_offset);
+            meshes[i] = generateChunkMeshData(chunkData[i]->voxel_data, chunkData[i]->chunk_offset, localMeasurements[i]);
             meshes[i].transform = chunkData[i]->worldTransform;
         }
     }
 
+
+    timer.stop();
+    measurements.meshInstanceChunks = timer.elapsedMilliseconds();
+
+    timer.start();
     meshes.erase(
         std::remove_if(meshes.begin(), meshes.end(), 
             [](const ChunkMesh& m) { return m.vertices.empty(); }),
         meshes.end()
     );
 
-    for (ChunkMesh& mesh : meshes)
+    for (ChunkMesh& mesh : meshes) {
         generateMeshBuffers(mesh);
+        measurements.vertexCount += mesh.vertices.size();
+    }
+
+    timer.stop();
+    measurements.meshPost = timer.elapsedMilliseconds();
+    measurements.meshTotal = timerTotal.elapsedMilliseconds();
+
+    for (size_t i = 0; i < localMeasurements.size(); i++)
+    {
+        measurements.chunkMeasurements.occupancyMaskTotal += localMeasurements[i].occupancyMaskTotal;
+        measurements.chunkMeasurements.faceCullingTotal += localMeasurements[i].faceCullingTotal;
+        measurements.chunkMeasurements.meshingTotal += localMeasurements[i].meshingTotal;
+    }
 }
 
 void VoxInstance::render(Shader& shader, mat4& mvp)

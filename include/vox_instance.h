@@ -32,13 +32,23 @@ enum class FaceDirection {
 	BACK
 };
 
+typedef struct ChunkMeasurements {
+	float64 occupancyMaskTotal = 0.0;
+	float64 faceCullingTotal = 0.0;
+	float64 meshingTotal = 0.0;
+};
+
 typedef struct MeasurementData {
-	float64 meshGenerationDuration;
-	float64 dispatchPre; 
-	float64 dispatchPost;
+	// For current instance in ms
+	float64 meshPre = 0.0;
+	float64 meshInstanceChunks = 0.0;
+	float64 meshPost = 0.0;
+	float64 meshTotal = 0.0;
+
 	uint32 vertexCount = 0;
-	uint32 indexCount = 0;
-	uint32 packedDataCount = 0;
+	uint32 chunkCount = 0;
+
+	ChunkMeasurements chunkMeasurements;
 };
 
 typedef struct DrawElementsIndirectCommand {
@@ -101,7 +111,7 @@ struct VoxInstance {
 
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data);
 
-	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset);
+	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements);
 	void generateMeshBuffers(ChunkMesh& mesh);
 	
 	void generateChunks(std::vector<std::unique_ptr<Chunk>>& data);
