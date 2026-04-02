@@ -90,14 +90,6 @@ struct VoxInstance {
 		if (this != &other) {
 			// Clean up existing resources
 			cleanup();
-
-			// Move data
-			indirectCommand = other.indirectCommand;
-			instanceDataBuffer = other.instanceDataBuffer;
-
-			// Leave the other object in a valid state
-			other.indirectCommand = 0;
-			other.instanceDataBuffer = 0;
 		}
 		return *this;
 	}
@@ -134,8 +126,4 @@ struct VoxInstance {
 
 	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
-
-	uint32
-		rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
-		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0;
 };

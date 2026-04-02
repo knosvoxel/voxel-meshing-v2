@@ -349,10 +349,4 @@ void VoxInstance::cleanup()
         glDeleteVertexArrays(1, &mesh.vao);
         glDeleteBuffers(1, &mesh.vertexSSBO);
     }
-
-    glDeleteBuffers(1, &indirectCommand);
-    glDeleteBuffers(1, &instanceDataBuffer);
-    glDeleteBuffers(1, &rotatedModelSSBO);
-    
-    //free(voxelData);
 }
