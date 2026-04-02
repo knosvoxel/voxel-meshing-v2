@@ -76,31 +76,12 @@ static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uin
     uint32 v3 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y + quad.height), normal_idx, color);
     uint32 v4 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y + quad.height), normal_idx, color);
 
-    uint32 new_vertices[4] = { v1, v2, v3, v4 };
-
     if (is_reverse) {
-        std::swap(new_vertices[1], new_vertices[3]);
+        vertices.insert(vertices.end(), { v1, v3, v2, v1, v4, v3 });
     }
-    vertices.insert(vertices.end(), new_vertices, new_vertices + 4);
-}
-
-std::vector<uint32> VoxInstance::generateIndices(size_t vertex_count)
-{
-    int32 indices_count = vertex_count / 4;
-    std::vector<uint32> indices;
-    indices.reserve(indices_count);
-    for (size_t i = 0; i < indices_count; i++)
-    {
-        uint32 vert_index = static_cast<uint32>(i) * 4u;
-        indices.push_back(vert_index);
-        indices.push_back(vert_index + 1);
-        indices.push_back(vert_index + 2);
-        indices.push_back(vert_index);
-        indices.push_back(vert_index + 2);
-        indices.push_back(vert_index + 3);
+    else {
+        vertices.insert(vertices.end(), { v1, v2, v3, v1, v3, v4 });
     }
-
-    return indices;
 }
 
 std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data)
@@ -146,7 +127,7 @@ std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint64, CHUNK_SI
     return greedy_quads;
 }
 
-ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
+ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset)
 {
     ChunkMesh mesh{};
     // solid voxels as binary for each x, y, z axis
@@ -257,35 +238,19 @@ ChunkMesh VoxInstance::generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset)
 
     mesh.vertices.insert(mesh.vertices.end(), vertices.begin(), vertices.end());
 
-    uint32 vertexSSBO;
-    uint32 ibo;
-    uint32 vao;
-
-    if (mesh.vertices.empty()) {
-        vao = 0;
-        vertexSSBO = 0;
-        ibo = 0;
-    }
-    else {
-        mesh.indices = generateIndices(mesh.vertices.size());
-
-        glCreateBuffers(1, &vertexSSBO);
-        glNamedBufferStorage(vertexSSBO, sizeof(uint32) * mesh.vertices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glNamedBufferSubData(vertexSSBO, 0, sizeof(uint32) * mesh.vertices.size(), mesh.vertices.data());
-
-        glCreateBuffers(1, &ibo);
-        glNamedBufferStorage(ibo, sizeof(uint32) * mesh.indices.size(), nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glNamedBufferSubData(ibo, 0, sizeof(uint32) * mesh.indices.size(), mesh.indices.data());
-
-        glCreateVertexArrays(1, &vao);
-        glVertexArrayElementBuffer(vao, ibo);
-    }
-
-    mesh.vao = vao;
-    mesh.vertexSSBO = vertexSSBO;
-    mesh.ibo = ibo;
-
     return mesh;
+}
+
+void VoxInstance::generateMeshBuffers(ChunkMesh& mesh)
+{
+    if (mesh.vertices.empty()) {
+        return;
+    }
+
+    glCreateBuffers(1, &mesh.vertexSSBO);
+    glNamedBufferStorage(mesh.vertexSSBO, sizeof(uint32) * mesh.vertices.size(), mesh.vertices.data(), GL_DYNAMIC_STORAGE_BIT);
+
+    glCreateVertexArrays(1, &mesh.vao);
 }
 
 void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
@@ -341,14 +306,26 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
 
     generateChunks(chunkData);
 
-    for (auto& chunk : chunkData) {
-        if (chunk != nullptr) {
-            //ChunkMesh new_mesh = generateChunkMesh(chunk->voxel_data, chunk->chunk_offset);
-            ChunkMesh new_mesh = generateChunkMesh(chunk->voxel_data, chunk->chunk_offset);
-            new_mesh.transform = chunk->worldTransform;
-            meshes.push_back(new_mesh);
+    meshes.resize(chunkData.size());
+
+#pragma omp parallel for schedule(static)
+    for (int32 i = 0; i < (int32)chunkData.size(); i++)
+    {
+        if (chunkData[i] != nullptr)
+        {
+            meshes[i] = generateChunkMeshData(chunkData[i]->voxel_data, chunkData[i]->chunk_offset);
+            meshes[i].transform = chunkData[i]->worldTransform;
         }
     }
+
+    meshes.erase(
+        std::remove_if(meshes.begin(), meshes.end(), 
+            [](const ChunkMesh& m) { return m.vertices.empty(); }),
+        meshes.end()
+    );
+
+    for (ChunkMesh& mesh : meshes)
+        generateMeshBuffers(mesh);
 }
 
 void VoxInstance::render(Shader& shader, mat4& mvp)
@@ -360,7 +337,7 @@ void VoxInstance::render(Shader& shader, mat4& mvp)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mesh.vertexSSBO);
 
         glBindVertexArray(mesh.vao);
-        glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+        glDrawArrays(GL_TRIANGLES, 0, mesh.vertices.size());
     }
 
     glBindVertexArray(0);
@@ -371,8 +348,6 @@ void VoxInstance::cleanup()
     for (ChunkMesh& mesh : meshes) {
         glDeleteVertexArrays(1, &mesh.vao);
         glDeleteBuffers(1, &mesh.vertexSSBO);
-        glDeleteBuffers(1, &mesh.ibo);
-        glDeleteBuffers(1, &mesh.ibo);
     }
 
     glDeleteBuffers(1, &indirectCommand);

@@ -77,11 +77,9 @@ struct Chunk {
 struct ChunkMesh {
 	mat4 transform;
 	std::vector<uint32> vertices;
-	std::vector<uint32> indices;
 
 	uint32 vao;
 	uint32 vertexSSBO;
-	uint32 ibo;
 };
 
 struct VoxInstance {
@@ -109,13 +107,13 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	std::vector<uint32> generateIndices(size_t vertex_count);
-	
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data);
 
-	ChunkMesh generateChunkMesh(uint8* voxel_data, ivec3 chunk_offset);
+	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset);
+	void generateMeshBuffers(ChunkMesh& mesh);
 	
 	void generateChunks(std::vector<std::unique_ptr<Chunk>>& data);
+
 
 	void generateInstanceMesh(const uint8* voxelData, vec3 modelSize,
 	vec3 worldOffset, MeasurementData& measurements);
