@@ -22,6 +22,16 @@ typedef struct RotationData {
 	mat4 transform;
 };
 
+struct InstanceRange {
+	uint32 vertexOffset;  // in vertices
+	uint32 indexOffset;   // in indices
+	uint32 faceOffset;    // in packed uint32s
+	uint32 vertexCount;
+	uint32 indexCount;
+	uint32 faceCount;
+	mat4   transform;
+};
+
 struct VoxScene {
 	VoxScene() {};
 	~VoxScene() {};
@@ -49,13 +59,29 @@ struct VoxScene {
 	void createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 instanceIdx, uint32& rotatedModelSSBO, ComputeShader& compute, ivec3& rotatedSize, float64& dispatchDuration);
 	uint8* createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instanceIdx, ivec3& rotatedModelSize, float64& dispatchDuration);
 
+	void rebaseIndices(uint32 srcIBO, uint32 dstIBO, const InstanceRange& r);
+	void buildSceneBuffers(const std::vector<InstanceRange>& ranges);
+
 	std::vector<VoxInstance> instances;
+	std::vector<InstanceRange> instance_ranges;
 
 	MeshingBuffers buffers;
 	uint32 palette = 0, numInstances = 0;
 
 	float64 total_draw_call_duration = 0.0;
 	
+
+	uint32 sceneVAO = 0;
+	uint32 sceneVertexSSBO = 0;
+	uint32 scenePackedSSBO = 0;
+	uint32 sceneIBO = 0;
+	uint32 sceneTransformSSBO = 0;
+	uint32 sceneIndirectBuffer = 0;  // GL_DRAW_INDIRECT_BUFFER
+
+	uint32 totalVertices = 0;
+	uint32 totalIndices = 0;
+	uint32 totalFaces = 0;
+
 	MeasurementData measurements;
 
 	MeshingShaders meshingShaders;

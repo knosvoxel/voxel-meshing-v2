@@ -13,6 +13,10 @@ layout(binding = 1, std430) readonly restrict buffer packedDataBuffer {
 	uint packedData[];
 };
 
+layout(binding = 2, std430) readonly restrict buffer transformBuffer {
+    mat4 transforms[];
+};
+
 uniform mat4 mvp;
 	
 flat out uint color_idx;
@@ -27,6 +31,7 @@ void main()
 
     color_idx = data & 255;
 	normal_idx = (data >> 8) & 7; // loweset 3 bits as only values from 0 - 5 are used
-
-	gl_Position = mvp * vec4(pos, 1.0);
+	
+	mat4 model = transforms[gl_BaseInstance];
+	gl_Position = mvp * model * vec4(pos, 1.0);
 }
