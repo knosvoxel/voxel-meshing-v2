@@ -177,6 +177,8 @@ void VoxScene::load(const char* path)
 		totalSizeZ += currModel->size_z;
 	}
 
+	uint64 curr = timer.elapsedMilliseconds();
+
 	buildSceneBuffers();
 
 	timer.stop();
@@ -219,6 +221,8 @@ void VoxScene::load(const char* path)
 	std::cout << " instance buffer creation total: " << meshPostTotal << "ms" << std::endl;
 	std::cout << " instance buffer creation average: " << meshPostTotal / numInstances << "ms" << std::endl;
 	std::cout << "-------------------------------" << std::endl;
+
+	std::cout << "Combine instance buffers into scene buffer: " << timer.elapsedMilliseconds() - curr << "ms\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
 

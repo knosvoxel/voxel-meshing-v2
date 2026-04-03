@@ -264,15 +264,6 @@ void VoxInstance::generateMeshBuffers(MeasurementData& measurements)
         instanceVertices.insert(instanceVertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     }
 
-
-    //glCreateBuffers(1, &vertexSSBO);
-    //glNamedBufferStorage(vertexSSBO, sizeof(uint32) * instanceVertices.size(), instanceVertices.data(), GL_DYNAMIC_STORAGE_BIT);
-
-    //glCreateBuffers(1, &transformSSBO);
-    //glNamedBufferStorage(transformSSBO, sizeof(mat4) * transforms.size(), transforms.data(), GL_DYNAMIC_STORAGE_BIT);
-
-    //glCreateVertexArrays(1, &vao);
-
     measurements.vertexCount += instanceVertices.size();
 }
 
