@@ -265,13 +265,13 @@ void VoxInstance::generateMeshBuffers(MeasurementData& measurements)
     }
 
 
-    glCreateBuffers(1, &vertexSSBO);
-    glNamedBufferStorage(vertexSSBO, sizeof(uint32) * instanceVertices.size(), instanceVertices.data(), GL_DYNAMIC_STORAGE_BIT);
+    //glCreateBuffers(1, &vertexSSBO);
+    //glNamedBufferStorage(vertexSSBO, sizeof(uint32) * instanceVertices.size(), instanceVertices.data(), GL_DYNAMIC_STORAGE_BIT);
 
-    glCreateBuffers(1, &transformSSBO);
-    glNamedBufferStorage(transformSSBO, sizeof(mat4) * transforms.size(), transforms.data(), GL_DYNAMIC_STORAGE_BIT);
+    //glCreateBuffers(1, &transformSSBO);
+    //glNamedBufferStorage(transformSSBO, sizeof(mat4) * transforms.size(), transforms.data(), GL_DYNAMIC_STORAGE_BIT);
 
-    glCreateVertexArrays(1, &vao);
+    //glCreateVertexArrays(1, &vao);
 
     measurements.vertexCount += instanceVertices.size();
 }
@@ -328,7 +328,6 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     this->worldOffset = worldOffset;
 
     sizeInChunks = ivec3((instanceDimensions + CHUNK_SIZE - 1) / CHUNK_SIZE);
-    // worldTransform = 
 
     generateChunks();
     
@@ -375,23 +374,4 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
         measurements.chunkMeasurements.faceCullingTotal += localMeasurements[i].faceCullingTotal;
         measurements.chunkMeasurements.meshingTotal += localMeasurements[i].meshingTotal;
     }
-}
-
-void VoxInstance::render(Shader& shader, mat4& mvp)
-{
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vertexSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, transformSSBO);
-
-    glBindVertexArray(vao);
-
-    glMultiDrawArrays(GL_TRIANGLES, firsts.data(), counts.data(), firsts.size());
-
-    glBindVertexArray(0);
-}
-
-void VoxInstance::cleanup()
-{
-    glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(1, &vertexSSBO);
-    glDeleteBuffers(1, &transformSSBO);
 }

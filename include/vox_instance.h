@@ -94,10 +94,6 @@ struct VoxInstance {
 	~VoxInstance() {};
 
 	VoxInstance& operator=(VoxInstance&& other) noexcept {
-		if (this != &other) {
-			// Clean up existing resources
-			cleanup();
-		}
 		return *this;
 	}
 	VoxInstance(const VoxInstance&) = default;
@@ -121,14 +117,6 @@ struct VoxInstance {
 	{
 		return cx + cz * sizeInChunks.x + cy * sizeInChunks.x * sizeInChunks.z;
 	}
-
-	void render(Shader& shader, mat4& mvp);
-
-	void cleanup();
-
-	uint32 vao;
-	uint32 vertexSSBO;
-	uint32 transformSSBO;
 
 	const uint8* voxelData;
 	ivec3 instanceDimensions;

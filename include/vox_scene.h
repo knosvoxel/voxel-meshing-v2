@@ -40,13 +40,24 @@ struct VoxScene {
 		return *this;
 	}
 
+	void buildSceneBuffers();
+
 	void load(const char* path);
 	void render(mat4 mvp, float currentFrame);
 	void cleanup();
 
 	uint8* createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instanceIdx, ivec3& rotatedModelSize, float64& dispatchDuration);
 
+	uint32 sceneVAO;
+	uint32 sceneVertexSSBO;
+	uint32 sceneTransformSSBO;
+
 	std::vector<VoxInstance> instances;
+
+	std::vector<uint32> sceneVertices;
+	std::vector<int32>  sceneFirsts;
+	std::vector<int32>  sceneCounts;
+	std::vector<mat4>   sceneTransforms;
 
 	uint32 palette = 0, numInstances = 0;
 

@@ -32,6 +32,34 @@ static mat4 ogtTransformToGLM(const ogt_vox_scene* scene, const ogt_vox_instance
 	return compute_transform_mat(glm::mat4(col0, col1, col2, col3), pivot);
 }
 
+void VoxScene::buildSceneBuffers()
+{
+	for (VoxInstance& instance : instances)
+	{
+		int32 offset = (int32)sceneVertices.size();
+		for (int32 f : instance.firsts)
+		{
+			sceneFirsts.push_back(f + offset);
+		}
+
+		sceneCounts.insert(sceneCounts.end(), instance.counts.begin(), instance.counts.end());
+		sceneTransforms.insert(sceneTransforms.end(), instance.transforms.begin(), instance.transforms.end());
+		sceneVertices.insert(sceneVertices.end(), instance.instanceVertices.begin(), instance.instanceVertices.end());
+	}
+
+	glCreateBuffers(1, &sceneVertexSSBO);
+	glNamedBufferStorage(sceneVertexSSBO,
+		sizeof(uint32) * sceneVertices.size(),
+		sceneVertices.data(), 0);
+
+	glCreateBuffers(1, &sceneTransformSSBO);
+	glNamedBufferStorage(sceneTransformSSBO,
+		sizeof(mat4) * sceneTransforms.size(),
+		sceneTransforms.data(), 0);
+
+	glCreateVertexArrays(1, &sceneVAO);
+}
+
 void VoxScene::load(const char* path)
 {
 	Timer timer, timerTotal;
@@ -149,6 +177,8 @@ void VoxScene::load(const char* path)
 		totalSizeZ += currModel->size_z;
 	}
 
+	buildSceneBuffers();
+
 	timer.stop();
 
 	std::cout << "\n\nAmount of chunks: " << chunk_count << std::endl;
@@ -206,18 +236,23 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	shader.setVec3("light_direction", -0.45f, -0.7f, -0.2f);
 	shader.setMat4("mvp", mvp);
 
-	for (VoxInstance& instance : instances) {
-		instance.render(shader, mvp);
-	}
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sceneVertexSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, sceneTransformSSBO);
+	glBindVertexArray(sceneVAO);
+
+	glMultiDrawArrays(GL_TRIANGLES,
+		sceneFirsts.data(),
+		sceneCounts.data(),
+		(GLsizei)sceneFirsts.size());
+
+	glBindVertexArray(0);
 }
 
 void VoxScene::cleanup()
 {
-	for (VoxInstance& instance : instances)
-	{
-		instance.cleanup();
-	}
-
+	glDeleteVertexArrays(1, &sceneVAO);
+	glDeleteBuffers(1, &sceneVertexSSBO);
+	glDeleteBuffers(1, &sceneTransformSSBO);
 	glDeleteTextures(1, &palette);
 }
 
