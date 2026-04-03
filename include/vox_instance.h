@@ -127,7 +127,7 @@ struct VoxInstance {
 	std::vector<ChunkMesh> meshes;
 
 	std::vector<uint32> instanceVertices;
-	std::vector<int32> firsts;
-	std::vector<int32> counts;
+	std::vector<int32> firstVertices;
+	std::vector<int32> vertexCounts;
 	std::vector<mat4> transforms;
 };

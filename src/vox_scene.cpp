@@ -37,12 +37,12 @@ void VoxScene::buildSceneBuffers()
 	for (VoxInstance& instance : instances)
 	{
 		int32 offset = (int32)sceneVertices.size();
-		for (int32 f : instance.firsts)
+		for (int32 f : instance.firstVertices)
 		{
-			sceneFirsts.push_back(f + offset);
+			firstVerticesPerChunk.push_back(f + offset);
 		}
 
-		sceneCounts.insert(sceneCounts.end(), instance.counts.begin(), instance.counts.end());
+		sceneVertexCounts.insert(sceneVertexCounts.end(), instance.vertexCounts.begin(), instance.vertexCounts.end());
 		sceneTransforms.insert(sceneTransforms.end(), instance.transforms.begin(), instance.transforms.end());
 		sceneVertices.insert(sceneVertices.end(), instance.instanceVertices.begin(), instance.instanceVertices.end());
 	}
@@ -245,9 +245,9 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	glBindVertexArray(sceneVAO);
 
 	glMultiDrawArrays(GL_TRIANGLES,
-		sceneFirsts.data(),
-		sceneCounts.data(),
-		(GLsizei)sceneFirsts.size());
+		firstVerticesPerChunk.data(),
+		sceneVertexCounts.data(),
+		(GLsizei)firstVerticesPerChunk.size());
 
 	glBindVertexArray(0);
 }

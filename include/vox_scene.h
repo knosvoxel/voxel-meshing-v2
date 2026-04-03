@@ -55,8 +55,8 @@ struct VoxScene {
 	std::vector<VoxInstance> instances;
 
 	std::vector<uint32> sceneVertices;
-	std::vector<int32>  sceneFirsts;
-	std::vector<int32>  sceneCounts;
+	std::vector<int32>  firstVerticesPerChunk;
+	std::vector<int32>  sceneVertexCounts;
 	std::vector<mat4>   sceneTransforms;
 
 	uint32 palette = 0, numInstances = 0;

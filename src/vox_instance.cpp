@@ -258,8 +258,8 @@ void VoxInstance::generateMeshBuffers(MeasurementData& measurements)
     for (ChunkMesh& mesh : meshes)
     {
         if (mesh.vertices.empty()) continue;
-        firsts.push_back((int32)instanceVertices.size());
-        counts.push_back((int32)mesh.vertices.size());
+        firstVertices.push_back((int32)instanceVertices.size());
+        vertexCounts.push_back((int32)mesh.vertices.size());
         transforms.push_back(mesh.transform);
         instanceVertices.insert(instanceVertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     }
