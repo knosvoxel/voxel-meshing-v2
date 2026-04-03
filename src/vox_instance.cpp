@@ -133,9 +133,9 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     local.start();
     ChunkMesh mesh{};
     // solid voxels as binary for each x, y, z axis
-    std::vector<uint64> axis_cols(3 * CHUNK_SIZE_P2, 0);
+    uint64 axis_cols[3][CHUNK_SIZE_P][CHUNK_SIZE_P] = {};
     // cull mask to perform greedy slicing on, based on solids from axis_cols
-    std::vector<uint64> col_face_masks(3 * CHUNK_SIZE_P2 * 2, 0); // TODO: does this have to be uint64 or is uint8 sufficient?
+    uint64 col_face_masks[6][CHUNK_SIZE_P][CHUNK_SIZE_P] = {};
 
     // binary representation for every solid voxel in y,x,z axis
     for (int32 y = 0; y < CHUNK_SIZE_P; y++)
@@ -146,11 +146,11 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         uint8 col = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
         if (col != 0) {
             // x,z : y axis
-            axis_cols[x + (z * CHUNK_SIZE_P)] |= 1ull << uint64(y);
+            axis_cols[0][z][x] |= 1ull << y;
             // z,y : x axis
-            axis_cols[z + (y * CHUNK_SIZE_P) + CHUNK_SIZE_P2] |= 1ull << uint64(x);
+            axis_cols[1][y][z] |= 1ull << x;
             // x,y : z axis
-            axis_cols[x + (y * CHUNK_SIZE_P) + CHUNK_SIZE_P2 * 2] |= 1ull << uint64(z);
+            axis_cols[2][y][x] |= 1ull << z;
         }
     }
 
@@ -160,13 +160,14 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     local.start();
     // face culling
     for (int32 axis = 0; axis < 3; axis++) 
-    for (int32 i = 0; i < CHUNK_SIZE_P2; i++)
+    for (int32 z = 0; z < CHUNK_SIZE_P; z++)
+    for (int32 x = 0; x < CHUNK_SIZE_P; x++)
     {
-        uint64 col = axis_cols[(CHUNK_SIZE_P2 * axis) + i];
+        uint64 col = axis_cols[axis][z][x];
         // sample ascending axis, set true if air meets solid
-        col_face_masks[(CHUNK_SIZE_P2 * (axis * 2 + 1)) + i] = col & ~(col >> 1);
+        col_face_masks[axis * 2 + 1][z][x] = col & ~(col >> 1);
         // sample descending axis, set true if air meets solid
-        col_face_masks[(CHUNK_SIZE_P2 * (axis * 2 + 0)) + i] = col & ~(col << 1);
+        col_face_masks[axis * 2 + 0][z][x] = col & ~(col << 1);
     }
 
     local.stop();
@@ -182,11 +183,9 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     for (int z = 0; z < CHUNK_SIZE; z++)
     for (int x = 0; x < CHUNK_SIZE; x++)
     {
-        // skip padding by adding + 1 to x & z
-        int32 col_idx = 1 + x + ((z + 1) * CHUNK_SIZE_P) + CHUNK_SIZE_P2 * axis;
-
         // removes the right most padding value, because it's outside of the chunk/ not meshed
-        uint64 col = col_face_masks[col_idx] >> 1;
+        // skip padding by adding + 1 to x & z
+        uint64 col = col_face_masks[axis][z + 1][x + 1] >> 1;
         // removes the left most padding value, because it's outside of the chunk/ not meshed
         col = col & ~(1ull << uint64(CHUNK_SIZE));
 
@@ -254,22 +253,33 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     return mesh;
 }
 
-void VoxInstance::generateMeshBuffers(ChunkMesh& mesh)
+void VoxInstance::generateMeshBuffers(MeasurementData& measurements)
 {
-    if (mesh.vertices.empty()) {
-        return;
+    for (ChunkMesh& mesh : meshes)
+    {
+        if (mesh.vertices.empty()) continue;
+        firsts.push_back((int32)instanceVertices.size());
+        counts.push_back((int32)mesh.vertices.size());
+        transforms.push_back(mesh.transform);
+        instanceVertices.insert(instanceVertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     }
 
-    glCreateBuffers(1, &mesh.vertexSSBO);
-    glNamedBufferStorage(mesh.vertexSSBO, sizeof(uint32) * mesh.vertices.size(), mesh.vertices.data(), GL_DYNAMIC_STORAGE_BIT);
 
-    glCreateVertexArrays(1, &mesh.vao);
+    glCreateBuffers(1, &vertexSSBO);
+    glNamedBufferStorage(vertexSSBO, sizeof(uint32) * instanceVertices.size(), instanceVertices.data(), GL_DYNAMIC_STORAGE_BIT);
+
+    glCreateBuffers(1, &transformSSBO);
+    glNamedBufferStorage(transformSSBO, sizeof(mat4) * transforms.size(), transforms.data(), GL_DYNAMIC_STORAGE_BIT);
+
+    glCreateVertexArrays(1, &vao);
+
+    measurements.vertexCount += instanceVertices.size();
 }
 
-void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
+void VoxInstance::generateChunks()
 {
     int32 total_chunks = sizeInChunks.x * sizeInChunks.y * sizeInChunks.z;
-    data.resize(total_chunks);
+    chunkData.resize(total_chunks);
 
 #pragma omp parallel for collapse(3) schedule(static)
     for (int32 cy = 0; cy < sizeInChunks.y; cy++)
@@ -303,7 +313,7 @@ void VoxInstance::generateChunks(std::vector<std::unique_ptr<Chunk>>& data)
             local.chunk_offset = ivec3(cx, cy, cz) * CHUNK_SIZE;
 
             int32 idx = getPoolIndex(cx, cy, cz);
-            data[idx] = std::make_unique<Chunk>(local);
+            chunkData[idx] = std::make_unique<Chunk>(local);
         }
     }
 }
@@ -320,7 +330,7 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     sizeInChunks = ivec3((instanceDimensions + CHUNK_SIZE - 1) / CHUNK_SIZE);
     // worldTransform = 
 
-    generateChunks(chunkData);
+    generateChunks();
     
     timer.stop();
     measurements.meshPre += timer.elapsedMilliseconds();
@@ -353,10 +363,7 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
         meshes.end()
     );
 
-    for (ChunkMesh& mesh : meshes) {
-        generateMeshBuffers(mesh);
-        measurements.vertexCount += mesh.vertices.size();
-    }
+    generateMeshBuffers(measurements);
 
     timer.stop();
     measurements.meshPost = timer.elapsedMilliseconds();
@@ -372,23 +379,19 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
 
 void VoxInstance::render(Shader& shader, mat4& mvp)
 {
-    for (ChunkMesh& mesh : meshes)
-    {
-        shader.setMat4("mvp", mvp * mesh.transform);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vertexSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, transformSSBO);
 
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, mesh.vertexSSBO);
+    glBindVertexArray(vao);
 
-        glBindVertexArray(mesh.vao);
-        glDrawArrays(GL_TRIANGLES, 0, mesh.vertices.size());
-    }
+    glMultiDrawArrays(GL_TRIANGLES, firsts.data(), counts.data(), firsts.size());
 
     glBindVertexArray(0);
 }
 
 void VoxInstance::cleanup()
 {
-    for (ChunkMesh& mesh : meshes) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        glDeleteBuffers(1, &mesh.vertexSSBO);
-    }
+    glDeleteVertexArrays(1, &vao);
+    glDeleteBuffers(1, &vertexSSBO);
+    glDeleteBuffers(1, &transformSSBO);
 }

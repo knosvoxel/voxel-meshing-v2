@@ -87,9 +87,6 @@ struct Chunk {
 struct ChunkMesh {
 	mat4 transform;
 	std::vector<uint32> vertices;
-
-	uint32 vao;
-	uint32 vertexSSBO;
 };
 
 struct VoxInstance {
@@ -112,9 +109,9 @@ struct VoxInstance {
 	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data);
 
 	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements);
-	void generateMeshBuffers(ChunkMesh& mesh);
+	void generateMeshBuffers(MeasurementData& measurements);
 	
-	void generateChunks(std::vector<std::unique_ptr<Chunk>>& data);
+	void generateChunks();
 
 
 	void generateInstanceMesh(const uint8* voxelData, vec3 modelSize,
@@ -129,6 +126,10 @@ struct VoxInstance {
 
 	void cleanup();
 
+	uint32 vao;
+	uint32 vertexSSBO;
+	uint32 transformSSBO;
+
 	const uint8* voxelData;
 	ivec3 instanceDimensions;
 	ivec3 sizeInChunks;
@@ -136,4 +137,9 @@ struct VoxInstance {
 
 	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
+
+	std::vector<uint32> instanceVertices;
+	std::vector<int32> firsts;
+	std::vector<int32> counts;
+	std::vector<mat4> transforms;
 };

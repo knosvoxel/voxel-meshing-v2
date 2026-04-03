@@ -5,6 +5,10 @@ layout(binding = 0, std430) readonly restrict buffer vertexBuffer {
 	uint vertices[];
 };
 
+layout(binding = 1, std430) readonly restrict buffer transformBuffer {
+	mat4 transforms[];
+};
+
 uniform mat4 mvp;
 	
 flat out uint color_idx;
@@ -18,5 +22,5 @@ void main()
     color_idx  = (v >> 22) & 255;
 	normal_idx = (v >> 18) & 7;
 
-	gl_Position = mvp * vec4(pos, 1.0);
+	gl_Position = mvp * transforms[gl_DrawID] * vec4(pos, 1.0);
 }
