@@ -59,6 +59,8 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
         GL_COMMAND_BARRIER_BIT
     );
     timer.start();
+
+    // Readback
     DrawElementsIndirectCommand commandData;
     glGetNamedBufferSubData(indirectCommand, 0, sizeof(DrawElementsIndirectCommand), &commandData);
     uint32 indexCount = commandData.count;
