@@ -165,7 +165,7 @@ void VoxScene::load(const char* path)
 		if (measurements.meshTotal < meshingDurationMin) meshingDurationMin = measurements.meshTotal;
 		if (measurements.meshTotal > meshingDurationMax) meshingDurationMax = measurements.meshTotal;
 
-		chunk_count += measurements.chunkCount;
+		chunk_count += measurements.actuallyMeshedChunkCount;
 		total_vertices += measurements.vertexCount;
 
 		chunkTotalOccupancyMask += measurements.chunkMeasurements.occupancyMaskTotal;
@@ -210,10 +210,10 @@ void VoxScene::load(const char* path)
 	std::cout << " meshing per instance total: " << meshInstanceChunksTotal << "ms" << std::endl;
 	std::cout << " meshing per instance average: " << meshInstanceChunksTotal / numInstances << "ms" << std::endl;
 	std::cout << " Per Chunks: " << std::endl;
-	std::cout << "  Occupancy mask generation total (wrong value): " << chunkTotalOccupancyMask << "ms" << std::endl;
+	std::cout << "  Occupancy mask generation total (Combined across all threads, not actual time): " << chunkTotalOccupancyMask << "ms" << std::endl;
 	std::cout << "  Occupancy mask generation average per chunk: " << chunkTotalOccupancyMask / chunk_count << "ms" << std::endl;
-	std::cout << "  Face culling total: " << chunkTotalFaceCulling << "ms" << std::endl;
-	std::cout << "  Face culling average per chunk: " << chunkTotalFaceCulling / chunk_count << "ms" << std::endl;
+	std::cout << "  Face culling total (Combined across all threads, not actual time): " << chunkTotalFaceCulling << "ms" << std::endl;
+	std::cout << "  Face culling average per chunk (Combined across all threads, not actual time): " << chunkTotalFaceCulling / chunk_count << "ms" << std::endl;
 	std::cout << "  Meshing from mask total: " << chunkTotalMeshing << "ms" << std::endl;
 	std::cout << "  Meshing from mask average per chunk: " << chunkTotalMeshing / chunk_count << "ms" << std::endl;
 	std::cout << std::endl;

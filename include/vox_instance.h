@@ -7,6 +7,7 @@
 #include <bit>
 #include <deque>
 #include <memory>
+#include <algorithm>
 #include <unordered_map>
 
 #include <ext/matrix_transform.hpp>
@@ -47,6 +48,7 @@ typedef struct MeasurementData {
 
 	uint32 vertexCount = 0;
 	uint32 chunkCount = 0;
+	uint32 actuallyMeshedChunkCount = 0;
 
 	ChunkMeasurements chunkMeasurements;
 };

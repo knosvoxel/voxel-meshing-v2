@@ -155,7 +155,7 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     }
 
     local.stop();
-    chunk_measurements.occupancyMaskTotal += local.elapsedMilliseconds();
+    chunk_measurements.occupancyMaskTotal = local.elapsedMilliseconds();
 
     local.start();
     // face culling
@@ -171,7 +171,7 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     }
 
     local.stop();
-    chunk_measurements.faceCullingTotal += local.elapsedMilliseconds();
+    chunk_measurements.faceCullingTotal = local.elapsedMilliseconds();
 
     local.start();
     // greedy meshing planes for every axis (6 directions)
@@ -248,7 +248,7 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     mesh.vertices.insert(mesh.vertices.end(), vertices.begin(), vertices.end());
 
     local.stop();
-    chunk_measurements.meshingTotal += local.elapsedMilliseconds();
+    chunk_measurements.meshingTotal = local.elapsedMilliseconds();
 
     return mesh;
 }
@@ -342,6 +342,10 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
         }
     }
 
+    measurements.actuallyMeshedChunkCount = std::count_if(
+        chunkData.begin(), chunkData.end(),
+        [](const auto& c) {return c != nullptr; }
+    );
 
     timer.stop();
     measurements.meshInstanceChunks = timer.elapsedMilliseconds();
