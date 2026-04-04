@@ -104,7 +104,7 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	std::vector<GreedyQuad> meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data);
+	void meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, uint32 normal_idx, bool is_reverse, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint32>& vertices);
 
 	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements);
 	void generateMeshBuffers(MeasurementData& measurements);

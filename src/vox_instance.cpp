@@ -84,47 +84,81 @@ static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uin
     }
 }
 
-std::vector<GreedyQuad> VoxInstance::meshBinaryPlane(std::array<uint64, CHUNK_SIZE>& data)
+void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, uint32 normal_idx, bool is_reverse, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint32>& vertices)
 {
-    std::vector<GreedyQuad> greedy_quads;
-    for (int32 row = 0; row < CHUNK_SIZE; row++)
+    for (uint32 row = 0; row < CHUNK_SIZE; row++)
     {
-        uint64 y = 0;
-        while (y < CHUNK_SIZE) {
-            // count trailing zero bits to find first solid voxel
-            y += std::countr_zero(data[row] >> y);
-            if (y >= CHUNK_SIZE) break;
+        uint64 bits = plane[row];
 
-            uint64 height = std::countr_one(data[row] >> y);
+        while (bits != 0)
+        {
+            int32 col = std::countr_zero(bits);
 
-            // convert height value to equal amount of positive bits:
-            // e.g. 1 = 0b1, 2 = 0b11, 4 = 0b1111, 8 = 0b11111111
-            uint64 height_as_mask = (height == CHUNK_SIZE_P) ? 0xFFFFFFFFFFFFFFFFull : ((1ull << height) - 1ull);
-            uint64 mask = height_as_mask << y;
+            ivec3 voxel_pos;
+            switch (axis)
+            {
+            case 0: case 1: voxel_pos = ivec3(row, layer, col); break; // down | up
+            case 2: case 3: voxel_pos = ivec3(layer, col, row); break; // left | right
+            default: voxel_pos = ivec3(row, col, layer); break; // forward | back
+            }
+            voxel_pos += chunk_offset;
+            uint8 color = getVoxel(voxelData, voxel_pos.x, voxel_pos.y, voxel_pos.z, instanceDimensions);
+
+            uint64 height = 1;
+            while (col + height < CHUNK_SIZE)
+            {
+                if (!(bits >> (col + height) & 1)) break;
+
+                ivec3 next_pos;
+                switch (axis)
+                {
+                case 0: case 1: next_pos = ivec3(row, layer, col + height); break;
+                case 2: case 3: next_pos = ivec3(layer, col + height, row); break;
+                default: next_pos = ivec3(row, col + height, layer);  break;
+                }
+                next_pos += chunk_offset;
+                if (getVoxel(voxelData, next_pos.x, next_pos.y, next_pos.z, instanceDimensions) != color) break;
+                height++;
+            }
+
+            uint64 height_mask = (height == 64) ? ~0ull : ((1ull << height) - 1ull);
+            uint64 mask = height_mask << col;
 
             uint64 width = 1;
-            // grow horizontally
             while (row + width < CHUNK_SIZE) {
-                // fetch bits spanning height in next row
-                uint64 next_row_height = (data[row + width] >> y) & height_as_mask;
-                if (next_row_height != height_as_mask) {
-                    break; // can't expand further
+                if ((plane[row + width] >> col & height_mask) != height_mask) break;
+
+                bool color_match = true;
+                for (uint64 h = 0; h < height; h++)
+                {
+                    ivec3 next_pos;
+                    switch (axis)
+                    {
+                    case 0: case 1: next_pos = ivec3(row + width, layer, col + h); break;
+                    case 2: case 3: next_pos = ivec3(layer, col + h, row + width); break;
+                    default: next_pos = ivec3(row + width, col + h, layer); break;
+                    }
+                    next_pos += chunk_offset;
+                    if (getVoxel(voxelData, next_pos.x, next_pos.y, next_pos.z, instanceDimensions) != color) {
+                        color_match = false;
+                        break;
+                    }
                 }
+                if (!color_match) break;
 
-                // remove bits we expanded into as each face can only be meshed once
-                data[row + width] &= ~mask;
-                width += 1;
+                // remove next row bits
+                plane[row + width] &= ~mask;
+                width++;
             }
-            greedy_quads.push_back(GreedyQuad{
-                ivec2(row, y),
-                (uint32)width,
-                (uint32)height
-                });
+            // remove current row bits
+            bits &= ~mask;
 
-            y += height;
+            GreedyQuad quad{
+                ivec2(row, col), (uint32)width, (uint32)height
+            };
+            appendVertices(vertices, dir, layer + negated_axis_offset, color, normal_idx, is_reverse, quad);
         }
     }
-    return greedy_quads;
 }
 
 ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements)
@@ -176,7 +210,8 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     local.start();
     // greedy meshing planes for every axis (6 directions)
     // key(color) -> unordered_map<axis(0 - 32), binary_plane(CHUNK_SIZE x CHUNK_SIZE bits)>
-    std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint64, CHUNK_SIZE>>> data[6];
+    //std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint64, CHUNK_SIZE>>> data[6];
+    uint64 face_planes[6][CHUNK_SIZE][CHUNK_SIZE] = {};
 
     // find faces and build binary planes based on the voxel color in y direction
     for (int32 axis = 0; axis < 6; axis++)
@@ -194,21 +229,7 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
             int32 y = std::countr_zero(col);
             // clear least significant set bit
             col &= col - 1;
-
-            ivec3 voxel_pos = {};
-
-            switch (axis)
-            {
-            case 0: case 1: voxel_pos = ivec3(x, y, z); break; // down, up
-            case 2: case 3: voxel_pos = ivec3(y, z, x); break; // left, right
-            default: voxel_pos = ivec3(x, z, y); break; // forward, back
-            }
-            
-            voxel_pos += chunk_offset;
-
-            uint8 current_voxel_col = getVoxel(voxelData, voxel_pos.x, voxel_pos.y, voxel_pos.z, instanceDimensions);
-
-            data[axis][current_voxel_col][y][x] |= 1ull << z;
+            face_planes[axis][y][x] |= 1ull << z;
         } 
     }
 
@@ -231,17 +252,11 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         bool is_reverse = isReverseOrder(face_dir);
         int32 negated_axis = negateAxis(face_dir);
 
-        auto& color_data = data[axis];
-
-        for (auto& [color, axis_plane] : color_data)
-        for (auto& [axis_pos, plane] : axis_plane)
+        for (int32 layer = 0; layer < CHUNK_SIZE; layer++)
         {
-            std::vector<GreedyQuad> quads_from_axis = meshBinaryPlane(plane);
-
-            for (GreedyQuad& quad : quads_from_axis)
-            {
-                appendVertices(vertices, face_dir, axis_pos + negated_axis, color, normal_idx, is_reverse, quad);
-            }
+            meshBinaryPlane(
+                face_planes[axis][layer], axis, layer, face_dir, normal_idx, is_reverse, negated_axis, chunk_offset, vertices
+            );
         }
     }
 
