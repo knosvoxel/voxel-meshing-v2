@@ -1,5 +1,8 @@
 #include "vox_instance.h"
 
+// mask to remove padding bits from uint64
+static constexpr uint64 P_MASK = ~(1ull << 63 | 1ull);
+
 static inline int32 negateAxis(FaceDirection& dir) {
     switch (dir)
     {
@@ -90,7 +93,7 @@ void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDi
     {
         uint64 bits = plane[row];
 
-        while (bits != 0)
+        while (bits != 0) // while unmeshed bits remain in row
         {
             int32 col = std::countr_zero(bits);
 
@@ -117,7 +120,7 @@ void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDi
                 default: next_pos = ivec3(row, col + height, layer);  break;
                 }
                 next_pos += chunk_offset;
-                if (getVoxel(voxelData, next_pos.x, next_pos.y, next_pos.z, instanceDimensions) != color) break;
+                if (getVoxel(voxelData, next_pos.x, next_pos.y, next_pos.z, instanceDimensions) != color) break; // if colors don't match, terminate loop
                 height++;
             }
 
@@ -166,25 +169,25 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     Timer local;
     local.start();
     ChunkMesh mesh{};
-    // solid voxels as binary for each x, y, z axis
-    uint64 axis_cols[3][CHUNK_SIZE_P][CHUNK_SIZE_P] = {};
-    // cull mask to perform greedy slicing on, based on solids from axis_cols
-    uint64 col_face_masks[6][CHUNK_SIZE_P][CHUNK_SIZE_P] = {};
+    // binary represenation of all solid voxels in the chunk
+    static thread_local uint64 opaqueMask[CHUNK_SIZE_P * CHUNK_SIZE_P];
+    memset(opaqueMask, 0, sizeof(uint64) * CHUNK_SIZE_P * CHUNK_SIZE_P);
 
-    // binary representation for every solid voxel in y,x,z axis
-    for (int32 y = 0; y < CHUNK_SIZE_P; y++)
-    for (int32 z = 0; z < CHUNK_SIZE_P; z++)
-    for (int32 x = 0; x < CHUNK_SIZE_P; x++)
+    // cull mask to perform face meshing on, based on solids from opaqueMask
+    // uint64: columns | CHUNK_SIZE * CHUNK_SIZE: rows * layers | 6: one per each axis
+    static thread_local uint64 faceMasks[CHUNK_SIZE * CHUNK_SIZE * 6];
+    memset(faceMasks, 0, sizeof(uint64) * CHUNK_SIZE * CHUNK_SIZE * 6);
+
+
+    // binary representation for every solid voxel in mesh
+    for (int32 y = 0; y < CHUNK_SIZE_P; y++) // layer
+    for (int32 x = 0; x < CHUNK_SIZE_P; x++) // row
+    for (int32 z = 0; z < CHUNK_SIZE_P; z++) // column
     {
         ivec3 pos = ivec3(x, y, z) + chunk_offset - ivec3(1);
         uint8 col = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
         if (col != 0) {
-            // x,z : y axis
-            axis_cols[0][z][x] |= 1ull << y;
-            // z,y : x axis
-            axis_cols[1][y][z] |= 1ull << x;
-            // x,y : z axis
-            axis_cols[2][y][x] |= 1ull << z;
+            opaqueMask[x + y * CHUNK_SIZE_P] |= 1ull << z;
         }
     }
 
@@ -192,44 +195,64 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
     chunk_measurements.occupancyMaskTotal = local.elapsedMilliseconds();
 
     local.start();
-    // face culling
-    for (int32 axis = 0; axis < 3; axis++) 
-    for (int32 z = 0; z < CHUNK_SIZE_P; z++)
-    for (int32 x = 0; x < CHUNK_SIZE_P; x++)
+    // face culling | a: layer b: row
+    for (int32 a = 1; a < CHUNK_SIZE_P - 1; a++)
+    for (int32 b = 1; b < CHUNK_SIZE_P - 1; b++)
     {
-        uint64 col = axis_cols[axis][z][x];
-        // sample ascending axis, set true if air meets solid
-        col_face_masks[axis * 2 + 1][z][x] = col & ~(col >> 1);
-        // sample descending axis, set true if air meets solid
-        col_face_masks[axis * 2 + 0][z][x] = col & ~(col << 1);
+        // fetch colums of current 62 * 62 opaque mask layer
+        const uint64 columnBits = opaqueMask[(a * CHUNK_SIZE_P) + b] & P_MASK;
+        // index opaque mask in two directions
+        const int baIndex = (b - 1) + (a - 1) * CHUNK_SIZE;
+        const int abIndex = (a - 1) + (b - 1) * CHUNK_SIZE;
+
+        // Y faces (up/down): a=y, b=x, bits=z
+        faceMasks[baIndex + 0 * CHUNK_SIZE_2] = (columnBits & ~opaqueMask[(a * CHUNK_SIZE_P) + CHUNK_SIZE_P + b]) >> 1;
+        faceMasks[baIndex + 1 * CHUNK_SIZE_2] = (columnBits & ~opaqueMask[(a * CHUNK_SIZE_P) - CHUNK_SIZE_P + b]) >> 1;
+
+        // X faces (left/right): a=y, b=x, bits=z  
+        faceMasks[abIndex + 2 * CHUNK_SIZE_2] = (columnBits & ~opaqueMask[(a * CHUNK_SIZE_P) + (b + 1)]) >> 1;
+        faceMasks[abIndex + 3 * CHUNK_SIZE_2] = (columnBits & ~opaqueMask[(a * CHUNK_SIZE_P) + (b - 1)]) >> 1;
+
+        // Z faces (forward/back): a=y, b=x, bits=z
+        faceMasks[baIndex + 4 * CHUNK_SIZE_2] = (columnBits & ~(opaqueMask[(a * CHUNK_SIZE_P) + b] >> 1)) >> 1;
+        faceMasks[baIndex + 5 * CHUNK_SIZE_2] = (columnBits & ~(opaqueMask[(a * CHUNK_SIZE_P) + b] << 1)) >> 1;
     }
 
     local.stop();
     chunk_measurements.faceCullingTotal = local.elapsedMilliseconds();
 
     local.start();
-    // greedy meshing planes for every axis (6 directions)
-    // key(color) -> unordered_map<axis(0 - 32), binary_plane(CHUNK_SIZE x CHUNK_SIZE bits)>
-    //std::unordered_map<uint32, std::unordered_map<uint32, std::array<uint64, CHUNK_SIZE>>> data[6];
-    uint64 face_planes[6][CHUNK_SIZE][CHUNK_SIZE] = {};
 
-    // find faces and build binary planes based on the voxel color in y direction
+    // greedy meshing planes for every axis (6 directions) / face planes
+    // 62 layers, 62 rows, 64 bit to fir the 62 column bits
+    static thread_local uint64 face_planes[6][CHUNK_SIZE][CHUNK_SIZE];
+    memset(face_planes, 0, sizeof(face_planes));
+
+    // set bits whre faces are to be meshed
     for (int32 axis = 0; axis < 6; axis++)
-    for (int z = 0; z < CHUNK_SIZE; z++)
-    for (int x = 0; x < CHUNK_SIZE; x++)
+    for (int i = 0; i < CHUNK_SIZE; i++)
+    for (int j = 0; j < CHUNK_SIZE; j++)
     {
-        // removes the right most padding value, because it's outside of the chunk/ not meshed
-        // skip padding by adding + 1 to x & z
-        uint64 col = col_face_masks[axis][z + 1][x + 1] >> 1;
-        // removes the left most padding value, because it's outside of the chunk/ not meshed
-        col = col & ~(1ull << uint64(CHUNK_SIZE));
+        uint64 col = faceMasks[i + j * CHUNK_SIZE + axis * CHUNK_SIZE_2];
+        //// removes the right most padding value, because it's outside of the chunk/ not meshed
+        //// skip padding by adding + 1 to x & z
+        //uint64 col = col_face_masks[axis][z + 1][x + 1] >> 1;
+        //// removes the left most padding value, because it's outside of the chunk/ not meshed
+        //col = col & ~(1ull << uint64(CHUNK_SIZE));
 
         // fetch face positions
+        // col is only 0 if no bits are left in the associated column
         while (col != 0) {
-            int32 y = std::countr_zero(col);
-            // clear least significant set bit
+            int32 layer = std::countr_zero(col);
+            // clear least significant set bit so that next iteration can clear next bit
             col &= col - 1;
-            face_planes[axis][y][x] |= 1ull << z;
+            //face_planes[axis][y][x] |= 1ull << z;
+            switch (axis)
+            {
+            case 0: case 1: face_planes[axis][j][i] |= 1ull << layer; break;
+            case 2: case 3: face_planes[axis][j][layer] |= 1ull << i; break;
+            case 4: case 5: face_planes[axis][layer][i] |= 1ull << j; break;
+            }
         } 
     }
 
@@ -240,12 +263,12 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         FaceDirection face_dir;
         switch (axis)
         {
-        case 0: face_dir = FaceDirection::DOWN; break;
-        case 1: face_dir = FaceDirection::UP; break;
-        case 2: face_dir = FaceDirection::LEFT; break;
-        case 3: face_dir = FaceDirection::RIGHT; break;
-        case 4: face_dir = FaceDirection::FORWARD; break;
-        default: face_dir = FaceDirection::BACK; break;
+        case 0: face_dir = FaceDirection::UP; break;
+        case 1: face_dir = FaceDirection::DOWN; break;
+        case 2: face_dir = FaceDirection::RIGHT; break;
+        case 3: face_dir = FaceDirection::LEFT; break;
+        case 4: face_dir = FaceDirection::BACK; break;
+        default: face_dir = FaceDirection::FORWARD; break;
         }
 
         uint32 normal_idx = getNormalIndex(face_dir);

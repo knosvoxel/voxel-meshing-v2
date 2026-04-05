@@ -20,6 +20,7 @@
 using namespace glm;
 
 static const int32 CHUNK_SIZE = 62;
+static const int32 CHUNK_SIZE_2 = CHUNK_SIZE * CHUNK_SIZE;
 static const int32 CHUNK_SIZE_P = CHUNK_SIZE + 2;
 static const int32 CHUNK_SIZE_P2 = CHUNK_SIZE_P * CHUNK_SIZE_P;
 static const int32 CHUNK_SIZE_P3 = CHUNK_SIZE_P * CHUNK_SIZE_P * CHUNK_SIZE_P;
