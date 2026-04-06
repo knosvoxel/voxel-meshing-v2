@@ -62,12 +62,6 @@ typedef struct DrawElementsIndirectCommand {
 	uint32 baseInstance;
 };
 
-struct GreedyQuad {
-	ivec2 start_pos;
-	uint32 width;
-	uint32 height;
-};
-
 // TODO: draw elements directly
 
 struct Chunk {
@@ -89,7 +83,7 @@ struct Chunk {
 
 struct ChunkMesh {
 	mat4 transform;
-	std::vector<uint32> vertices;
+	std::vector<uint64> quads;
 };
 
 struct VoxInstance {
@@ -105,7 +99,7 @@ struct VoxInstance {
 		*this = std::move(other);
 	}
 
-	void meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, uint32 normal_idx, bool is_reverse, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint32>& vertices);
+	void meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint64>& vertices);
 
 	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements);
 	void generateMeshBuffers(MeasurementData& measurements);
@@ -129,7 +123,7 @@ struct VoxInstance {
 	std::vector<std::unique_ptr<Chunk>> chunkData;
 	std::vector<ChunkMesh> meshes;
 
-	std::vector<uint32> instanceVertices;
+	std::vector<uint64> instanceQuads;
 	std::vector<int32> firstVertices;
 	std::vector<int32> vertexCounts;
 	std::vector<mat4> transforms;

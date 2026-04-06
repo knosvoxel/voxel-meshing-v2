@@ -16,78 +16,26 @@ static inline int32 negateAxis(FaceDirection& dir) {
     }
 }
 
-static ivec3 worldToSample(FaceDirection dir, int32 axis, int32 x, int32 y)
-{
-    switch (dir)
-    {
-    case FaceDirection::UP: case FaceDirection::DOWN:
-        return ivec3(x, axis, y); break;
-    case FaceDirection::LEFT: case FaceDirection::RIGHT:
-        return ivec3(axis, y, x); break;
-    case FaceDirection::FORWARD: case FaceDirection::BACK:
-        return ivec3(x, y, axis); break;
-    default: return ivec3(-1); break;
-    }
-}
-
-static uint32 getNormalIndex(FaceDirection dir)
-{
-    switch (dir)
-    {
-    case FaceDirection::UP: return 5; break;
-    case FaceDirection::DOWN: return 4; break;
-    case FaceDirection::LEFT: return 0; break;
-    case FaceDirection::RIGHT: return 1; break;
-    case FaceDirection::FORWARD: return 2; break;
-    case FaceDirection::BACK: return 3; break;
-    default: return -1; break;
-    }
-}
-
-static bool isReverseOrder(FaceDirection dir) {
-    switch (dir)
-    {
-    case FaceDirection::UP: return true; break;
-    case FaceDirection::DOWN: return false; break;
-    case FaceDirection::LEFT: return false; break;
-    case FaceDirection::RIGHT: return true; break;
-    case FaceDirection::FORWARD: return true; break;
-    case FaceDirection::BACK: return false;break;
-    default: break;
-    }
-}
-
 static inline uint8 getVoxel(const uint8* voxels, int32 x, int32 y, int32 z, const ivec3& size)
 {
     if (x < 0 || y < 0 || z < 0 ||
         x >= size.x || y >= size.y || z >= size.z)
         return 0; // treat out-of-bounds as air
-    return voxels[x + y * size.x + z * size.x * size.y];
+    return voxels[y + x * size.y + z * size.y * size.x];
 }
 
-static inline uint32 makeVertex(ivec3 pos, uint32 normal, uint8 color) {
-    return (uint32(pos.x) & 63u)
-        | ((uint32(pos.y) & 63u) << 6)
-        | ((uint32(pos.z) & 63u) << 12)
-        | (normal << 18)
-        | (uint32(color) << 22);
+static inline uint64 makeQuad(int32 x, int32 y, int32 z, int32 width, int32 height, uint8 color, uint8 face)
+{
+    return ((uint64)face << 40)
+        | ((uint64)color << 32)
+        | ((uint64)height << 24)
+        | ((uint64)width << 18)
+        | ((uint64)z << 12)
+        | ((uint64)y << 6)
+        | (uint64)x;
 }
 
-static void appendVertices(std::vector<uint32>& vertices, FaceDirection dir, uint32 axis, uint8 color, uint32 normal_idx, bool is_reverse, GreedyQuad& quad) {
-    uint32 v1 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y), normal_idx, color);
-    uint32 v2 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y), normal_idx, color);
-    uint32 v3 = makeVertex(worldToSample(dir, axis, quad.start_pos.x + quad.width, quad.start_pos.y + quad.height), normal_idx, color);
-    uint32 v4 = makeVertex(worldToSample(dir, axis, quad.start_pos.x, quad.start_pos.y + quad.height), normal_idx, color);
-
-    if (is_reverse) {
-        vertices.insert(vertices.end(), { v1, v3, v2, v1, v4, v3 });
-    }
-    else {
-        vertices.insert(vertices.end(), { v1, v2, v3, v1, v3, v4 });
-    }
-}
-
-void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, uint32 normal_idx, bool is_reverse, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint32>& vertices)
+void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint64>& quads)
 {
     for (uint32 row = 0; row < CHUNK_SIZE; row++)
     {
@@ -156,10 +104,20 @@ void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDi
             // remove current row bits
             bits &= ~mask;
 
-            GreedyQuad quad{
-                ivec2(row, col), (uint32)width, (uint32)height
-            };
-            appendVertices(vertices, dir, layer + negated_axis_offset, color, normal_idx, is_reverse, quad);
+            uint64 quad;
+            switch (axis)
+            {
+            case 0: case 1: // Y faces: layer = y, row = x, col = z
+                quad = makeQuad(row, layer + negated_axis_offset, col, width, height, color, axis);
+                break;
+            case 2: case 3: // X faces: layer = x, row = z, col = y
+                quad = makeQuad(layer + negated_axis_offset, col, row, width, height, color, axis);
+                break;
+            default: // Z faces: layer = z, row = x, col = y
+                quad = makeQuad(row, col, layer + negated_axis_offset, width, height, color, axis);
+                break;
+            }
+            quads.push_back(quad);
         }
     }
 }
@@ -180,9 +138,9 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
 
 
     // binary representation for every solid voxel in mesh
-    for (int32 y = 0; y < CHUNK_SIZE_P; y++) // layer
+    for (int32 z = 0; z < CHUNK_SIZE_P; z++) // layer
     for (int32 x = 0; x < CHUNK_SIZE_P; x++) // row
-    for (int32 z = 0; z < CHUNK_SIZE_P; z++) // column
+    for (int32 y = 0; y < CHUNK_SIZE_P; y++) // column
     {
         ivec3 pos = ivec3(x, y, z) + chunk_offset - ivec3(1);
         uint8 col = getVoxel(voxelData, pos.x, pos.y, pos.z, instanceDimensions);
@@ -256,8 +214,8 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         } 
     }
 
-    std::vector<uint32> vertices;
-    vertices.reserve(CHUNK_SIZE * CHUNK_SIZE * 6);
+    std::vector<uint64> quads;
+    quads.reserve(CHUNK_SIZE * CHUNK_SIZE);
 
     for (int32 axis = 0; axis < 6; axis++) {
         FaceDirection face_dir;
@@ -271,19 +229,17 @@ ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offs
         default: face_dir = FaceDirection::FORWARD; break;
         }
 
-        uint32 normal_idx = getNormalIndex(face_dir);
-        bool is_reverse = isReverseOrder(face_dir);
         int32 negated_axis = negateAxis(face_dir);
 
         for (int32 layer = 0; layer < CHUNK_SIZE; layer++)
         {
             meshBinaryPlane(
-                face_planes[axis][layer], axis, layer, face_dir, normal_idx, is_reverse, negated_axis, chunk_offset, vertices
+                face_planes[axis][layer], axis, layer, face_dir, negated_axis, chunk_offset, quads
             );
         }
     }
 
-    mesh.vertices.insert(mesh.vertices.end(), vertices.begin(), vertices.end());
+    mesh.quads.insert(mesh.quads.end(), quads.begin(), quads.end());
 
     local.stop();
     chunk_measurements.meshingTotal = local.elapsedMilliseconds();
@@ -295,14 +251,14 @@ void VoxInstance::generateMeshBuffers(MeasurementData& measurements)
 {
     for (ChunkMesh& mesh : meshes)
     {
-        if (mesh.vertices.empty()) continue;
-        firstVertices.push_back((int32)instanceVertices.size());
-        vertexCounts.push_back((int32)mesh.vertices.size());
+        if (mesh.quads.empty()) continue;
+        firstVertices.push_back((int32)instanceQuads.size());
+        vertexCounts.push_back((int32)mesh.quads.size() * 6);
         transforms.push_back(mesh.transform);
-        instanceVertices.insert(instanceVertices.end(), mesh.vertices.begin(), mesh.vertices.end());
+        instanceQuads.insert(instanceQuads.end(), mesh.quads.begin(), mesh.quads.end());
     }
 
-    measurements.vertexCount += instanceVertices.size();
+    measurements.vertexCount += instanceQuads.size();
 }
 
 void VoxInstance::generateChunks()
@@ -328,7 +284,9 @@ void VoxInstance::generateChunks()
                 voxel_pos.z >= instanceDimensions.z)
                 continue;
 
-            uint32 col_idx = voxel_pos.x + voxel_pos.y * instanceDimensions.x + voxel_pos.z * instanceDimensions.x * instanceDimensions.y;
+            uint32 col_idx = voxel_pos.y
+                + voxel_pos.x * instanceDimensions.y
+                + voxel_pos.z * instanceDimensions.y * instanceDimensions.x;
             uint8 col = voxelData[col_idx];
             if (col != 0) {
                 local.voxel_data[Chunk::getIndex(lx, ly, lz)] = col;
@@ -391,7 +349,7 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     timer.start();
     meshes.erase(
         std::remove_if(meshes.begin(), meshes.end(), 
-            [](const ChunkMesh& m) { return m.vertices.empty(); }),
+            [](const ChunkMesh& m) { return m.quads.empty(); }),
         meshes.end()
     );
 

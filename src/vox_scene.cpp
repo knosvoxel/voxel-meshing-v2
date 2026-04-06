@@ -36,21 +36,21 @@ void VoxScene::buildSceneBuffers()
 {
 	for (VoxInstance& instance : instances)
 	{
-		int32 offset = (int32)sceneVertices.size();
+		int32 offset = (int32)sceneQuads.size();
 		for (int32 f : instance.firstVertices)
 		{
-			firstVerticesPerChunk.push_back(f + offset);
+			firstVerticesPerChunk.push_back((f + offset) * 6);
 		}
 
 		sceneVertexCounts.insert(sceneVertexCounts.end(), instance.vertexCounts.begin(), instance.vertexCounts.end());
 		sceneTransforms.insert(sceneTransforms.end(), instance.transforms.begin(), instance.transforms.end());
-		sceneVertices.insert(sceneVertices.end(), instance.instanceVertices.begin(), instance.instanceVertices.end());
+		sceneQuads.insert(sceneQuads.end(), instance.instanceQuads.begin(), instance.instanceQuads.end());
 	}
 
 	glCreateBuffers(1, &sceneVertexSSBO);
 	glNamedBufferStorage(sceneVertexSSBO,
-		sizeof(uint32) * sceneVertices.size(),
-		sceneVertices.data(), 0);
+		sizeof(uint64) * sceneQuads.size(),
+		sceneQuads.data(), 0);
 
 	glCreateBuffers(1, &sceneTransformSSBO);
 	glNamedBufferStorage(sceneTransformSSBO,
@@ -316,7 +316,9 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 					finalPos.y >= 0 && finalPos.y < rotatedModelSize.y &&
 					finalPos.z >= 0 && finalPos.z < rotatedModelSize.z)
 				{
-					uint32 dstIdx = finalPos.x + (finalPos.y * rotatedModelSize.x) + (finalPos.z * rotatedModelSize.x * rotatedModelSize.y);
+					uint32 dstIdx = finalPos.y
+						+ (finalPos.x * rotatedModelSize.y)
+						+ (finalPos.z * rotatedModelSize.y * rotatedModelSize.x);
 					outData[dstIdx] = colIdx;
 				}
 			}

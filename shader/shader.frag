@@ -8,12 +8,12 @@ uniform sampler2D palette;
 uniform vec3 light_direction;
 
 const vec3 normal_directions[6] = vec3[6](
-    vec3(-1.0,  0.0,  0.0),  // 0
-    vec3( 1.0,  0.0,  0.0),  // 1
-    vec3( 0.0,  0.0, -1.0),  // 2
-    vec3( 0.0,  0.0,  1.0),  // 3
-    vec3( 0.0, -1.0,  0.0),  // 4
-    vec3( 0.0,  1.0,  0.0)   // 5
+    vec3( 0.0,  1.0,  0.0),  // 0 = UP
+    vec3( 0.0, -1.0,  0.0),  // 1 = DOWN
+    vec3( 1.0,  0.0,  0.0),  // 2 = RIGHT
+    vec3(-1.0,  0.0,  0.0),  // 3 = LEFT
+    vec3( 0.0,  0.0,  1.0),  // 4 = BACK
+    vec3( 0.0,  0.0, -1.0)   // 5 = FORWARD
 );
 	
 void main()
