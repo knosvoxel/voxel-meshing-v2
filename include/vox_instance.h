@@ -66,19 +66,7 @@ typedef struct DrawElementsIndirectCommand {
 
 struct Chunk {
 	mat4 worldTransform;
-	
-	static constexpr int32 sizeXZ = CHUNK_SIZE, sizeY = CHUNK_SIZE;
-	static constexpr int32 num_voxels = sizeXZ * sizeXZ * sizeY;
-
-	bool is_empty = true;
-
-	uint8 voxel_data[num_voxels] = {};
-
 	ivec3 chunk_offset;
-
-	static int32 getIndex(int32 x, int32 y, int32 z) {
-		return x + y * sizeXZ + z * sizeXZ * sizeY;
-	}
 };
 
 struct ChunkMesh {
@@ -101,7 +89,7 @@ struct VoxInstance {
 
 	void meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDirection dir, int32 negated_axis_offset, ivec3 chunk_offset, std::vector<uint64>& vertices);
 
-	ChunkMesh generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements);
+	ChunkMesh generateChunkMeshData(ivec3 chunk_offset, ChunkMeasurements& chunk_measurements);
 	void generateMeshBuffers(MeasurementData& measurements);
 	
 	void generateChunks();

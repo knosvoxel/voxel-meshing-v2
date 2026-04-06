@@ -122,7 +122,7 @@ void VoxInstance::meshBinaryPlane(uint64* plane, int32 axis, int32 layer, FaceDi
     }
 }
 
-ChunkMesh VoxInstance::generateChunkMeshData(uint8* voxel_data, ivec3 chunk_offset, ChunkMeasurements& chunk_measurements)
+ChunkMesh VoxInstance::generateChunkMeshData(ivec3 chunk_offset, ChunkMeasurements& chunk_measurements)
 {
     Timer local;
     local.start();
@@ -271,36 +271,39 @@ void VoxInstance::generateChunks()
     for (int32 cz = 0; cz < sizeInChunks.z; cz++)
     for (int32 cx = 0; cx < sizeInChunks.x; cx++)
     {
-        Chunk local{};
+        ivec3 chunkOrigin = ivec3(cx, cy, cz) * CHUNK_SIZE;
+        bool is_empty = true;
 
-        for (int32 ly = 0; ly < local.sizeY; ly++)
-        for (int32 lz = 0; lz < local.sizeXZ; lz++)
-        for (int32 lx = 0; lx < local.sizeXZ; lx++)
+        // Check if any voxel in this chunk's region is solid
+        for (int32 ly = 0; ly < CHUNK_SIZE && is_empty; ly++)
+        for (int32 lz = 0; lz < CHUNK_SIZE && is_empty; lz++)
+        for (int32 lx = 0; lx < CHUNK_SIZE && is_empty; lx++)
         {
-            ivec3 voxel_pos = ivec3(cx, cy, cz) * CHUNK_SIZE + ivec3(lx, ly, lz);
-
+            ivec3 voxel_pos = chunkOrigin + ivec3(lx, ly, lz);
             if (voxel_pos.x >= instanceDimensions.x ||
                 voxel_pos.y >= instanceDimensions.y ||
                 voxel_pos.z >= instanceDimensions.z)
                 continue;
 
-            uint32 col_idx = voxel_pos.y
+            uint32 idx = voxel_pos.y
                 + voxel_pos.x * instanceDimensions.y
                 + voxel_pos.z * instanceDimensions.y * instanceDimensions.x;
-            uint8 col = voxelData[col_idx];
-            if (col != 0) {
-                local.voxel_data[Chunk::getIndex(lx, ly, lz)] = col;
-                local.is_empty = false;
-            }
+            if (voxelData[idx] != 0)
+                is_empty = false;
         }
 
-        if (!local.is_empty) {
-            local.worldTransform = translate(mat4(1.0f), vec3(worldOffset) + vec3(cx, cy, cz) * float32(CHUNK_SIZE) - vec3(floor(instanceDimensions.x / 2.0), floor(instanceDimensions.y / 2.0), floor(instanceDimensions.z / 2.0)));
-
-            local.chunk_offset = ivec3(cx, cy, cz) * CHUNK_SIZE;
+        if (!is_empty) {
+            auto chunk = std::make_unique<Chunk>();
+            chunk->worldTransform = translate(mat4(1.0f),
+                vec3(worldOffset)
+                + vec3(cx, cy, cz) * float32(CHUNK_SIZE)
+                - vec3(floor(instanceDimensions.x / 2.0),
+                    floor(instanceDimensions.y / 2.0),
+                    floor(instanceDimensions.z / 2.0)));
+            chunk->chunk_offset = chunkOrigin;
 
             int32 idx = getPoolIndex(cx, cy, cz);
-            chunkData[idx] = std::make_unique<Chunk>(local);
+            chunkData[idx] = std::move(chunk);
         }
     }
 }
@@ -333,7 +336,7 @@ void VoxInstance::generateInstanceMesh(const uint8* voxelData, vec3 modelSize, v
     {
         if (chunkData[i] != nullptr)
         {
-            meshes[i] = generateChunkMeshData(chunkData[i]->voxel_data, chunkData[i]->chunk_offset, localMeasurements[i]);
+            meshes[i] = generateChunkMeshData(chunkData[i]->chunk_offset, localMeasurements[i]);
             meshes[i].transform = chunkData[i]->worldTransform;
         }
     }
