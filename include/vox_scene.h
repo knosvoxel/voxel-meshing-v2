@@ -61,7 +61,7 @@ struct VoxScene {
 
 	uint32 palette = 0, numInstances = 0;
 
-	uint32 total_vertices = 0;
+	uint32 total_quads = 0;
 	
 	MeasurementData measurements;
 

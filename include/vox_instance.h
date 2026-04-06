@@ -47,7 +47,7 @@ typedef struct MeasurementData {
 	float64 meshPost = 0.0;
 	float64 meshTotal = 0.0;
 
-	uint32 vertexCount = 0;
+	uint32 quadCount = 0;
 	uint32 chunkCount = 0;
 	uint32 actuallyMeshedChunkCount = 0;
 

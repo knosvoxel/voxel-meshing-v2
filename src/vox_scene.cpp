@@ -166,7 +166,7 @@ void VoxScene::load(const char* path)
 		if (measurements.meshTotal > meshingDurationMax) meshingDurationMax = measurements.meshTotal;
 
 		chunk_count += measurements.actuallyMeshedChunkCount;
-		total_vertices += measurements.vertexCount;
+		total_quads += measurements.quadCount;
 
 		chunkTotalOccupancyMask += measurements.chunkMeasurements.occupancyMaskTotal;
 		chunkTotalFaceCulling += measurements.chunkMeasurements.faceCullingTotal;

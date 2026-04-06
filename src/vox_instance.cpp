@@ -258,7 +258,7 @@ void VoxInstance::generateMeshBuffers(MeasurementData& measurements)
         instanceQuads.insert(instanceQuads.end(), mesh.quads.begin(), mesh.quads.end());
     }
 
-    measurements.vertexCount += instanceQuads.size();
+    measurements.quadCount += instanceQuads.size();
 }
 
 void VoxInstance::generateChunks()
