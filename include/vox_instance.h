@@ -62,8 +62,6 @@ typedef struct DrawElementsIndirectCommand {
 	uint32 baseInstance;
 };
 
-// TODO: draw elements directly
-
 struct Chunk {
 	mat4 worldTransform;
 	ivec3 chunk_offset;
