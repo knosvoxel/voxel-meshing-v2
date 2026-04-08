@@ -41,11 +41,6 @@ void VoxScene::load(const char* path)
 	timerTotal.start();
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
-	applyRotationsCompute = ComputeShader("../../shader/apply_rotations.comp");
-	meshingShaders.meshingComputeX = ComputeShader("../../shader/slicing_x.comp");
-	meshingShaders.meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
-	meshingShaders.meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
-
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
@@ -283,7 +278,7 @@ void VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 insta
 {
 	const ogt_vox_instance& instance = scene->instances[instanceIdx];
 	const ogt_vox_model* model = scene->models[instance.model_index];
-	mat4& transformMat = ogtTransformToGLM(scene, instance, model);
+	mat4 transformMat = ogtTransformToGLM(scene, instance, model);
 
 	vec3 corners[8] = {
 		{0, 0, 0},

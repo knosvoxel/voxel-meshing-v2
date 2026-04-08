@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 4.0)
 project(voxel-meshing-v2)
 
 find_package(OpenMP REQUIRED)
+find_package(assimp REQUIRED)
 
 # Source files
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -14,15 +15,17 @@ set(SOURCES
 	"${SRC_DIR}/application.cpp"
 	"${SRC_DIR}/camera.cpp" 
 	"${SRC_DIR}/line.cpp" 
-	"${SRC_DIR}/vox_instance.cpp" 
 	"${SRC_DIR}/vox_scene.cpp"
+	"${SRC_DIR}/mesh.cpp"
+	"${SRC_DIR}/model.cpp"
 )
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Executable definition and properties
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE "${SRC_DIR}")
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
     # Apply optimizations ONLY in Release, MinSizeRel, or RelWithDebInfo
@@ -91,7 +94,8 @@ target_link_libraries(${PROJECT_NAME}
     "imgui" 
     "ogt_vox" 
     "stb_image"
-    ${OpenMP_CXX_LIBRARIES}  # Use the variable version for Plain signatures
+    "assimp::assimp"
+    ${OpenMP_CXX_LIBRARIES}
     ${CMAKE_DL_LIBS}
 )
 

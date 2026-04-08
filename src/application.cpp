@@ -3,8 +3,8 @@
 const uint32 WIDTH = 1600;
 const uint32 HEIGHT = 900;
 
-const char* WINDOW_NAME = "Voxel Meshing";
-const char* VOX_FILE_PATH = "../../res/castle.vox";
+const char* WINDOW_NAME = "Voxel Meshing Offline";
+const char* FILE_PATH = "../../res/castle.vox";
 
 const float NEAR = 0.1f;
 const float FAR = 10000.0f;
@@ -45,7 +45,7 @@ void Application::init()
     coordY = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 1000.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
     coordZ = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, 1000.0f), vec3(0.0f, 0.0f, 1.0f));
 
-    scene.load(VOX_FILE_PATH);
+    scene.load(FILE_PATH);
 
     timer.stop();
     std::cout << "init total: " << timer.elapsedSeconds() << " s" << std::endl;

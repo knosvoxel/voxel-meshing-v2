@@ -9,28 +9,9 @@
 
 #include "shader.h"
 
-#include "vox_instance.h"
-
 #include "timer.h"
 
 using namespace glm;
-
-typedef struct RotationData {
-	vec4 instanceSize;
-	vec4 rotatedSize;
-	vec4 minBounds;
-	mat4 transform;
-};
-
-struct InstanceRange {
-	uint32 vertexOffset;  // in vertices
-	uint32 indexOffset;   // in indices
-	uint32 faceOffset;    // in packed uint32s
-	uint32 vertexCount;
-	uint32 indexCount;
-	uint32 faceCount;
-	mat4   transform;
-};
 
 struct VoxScene {
 	VoxScene() {};
