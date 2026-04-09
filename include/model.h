@@ -1,33 +1,32 @@
 #pragma once
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <glad/glad.h>
 
-#include <stb_image.h>
+#include <glm/glm.hpp>
 
-#include "mesh.h"
+#include <cgltf/cgltf.h>
 
-unsigned int TextureFromFile(const char* path, const std::string& directory, bool gamma = false);
+using namespace glm;
 
+struct MeshPrimitive {
+	uint32 vao;
+	uint32 vbo;
+	uint32 ibo;
+	GLsizei indexCount;
+	GLenum indexType;
+	void* indexOffset;
+};
 
-class Model
-{
-public:
-	Model(char* path)
-	{
-		loadModel(path);
-	}
+struct Model {
+	Model() {};
+	Model(const char* path);
 
-	void draw(Shader& shader);
+	void load(const char* path);
+	void render();
+	void cleanup();
 
-private:
-	std::vector<Mesh> meshes;
-	std::string directory;
-	std::vector<Texture> textures_loaded;
-
-	void loadModel(std::string path);
-	void processNode(aiNode* node, const aiScene* scene);
-	Mesh processMesh(aiMesh* mesh, const aiScene* scene);
-	std::vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName);
+	std::vector<MeshPrimitive> primitives;
 };

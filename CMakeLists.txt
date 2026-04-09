@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 4.0)
 project(voxel-meshing-v2)
 
 find_package(OpenMP REQUIRED)
-find_package(assimp REQUIRED)
 
 # Source files
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -16,8 +15,7 @@ set(SOURCES
 	"${SRC_DIR}/camera.cpp" 
 	"${SRC_DIR}/line.cpp" 
 	"${SRC_DIR}/vox_scene.cpp"
-	"${SRC_DIR}/mesh.cpp"
-	"${SRC_DIR}/model.cpp"
+    "${SRC_DIR}/model.cpp"
 )
 
 set(CMAKE_CXX_STANDARD 23)
@@ -88,13 +86,17 @@ add_subdirectory("${OGT_VOX_DIR}")
 set(STB_IMAGE_FOLDER "${LIB_DIR}/stb_image")
 add_subdirectory("${STB_IMAGE_FOLDER}")
 
+# cgltf
+set(CGLTF_FOLDER "${LIB_DIR}/cgltf")
+add_subdirectory("${CGLTF_FOLDER}")
+
 target_link_libraries(${PROJECT_NAME} 
     "glfw" 
     "glad" 
     "imgui" 
     "ogt_vox" 
     "stb_image"
-    "assimp::assimp"
+    "cgltf"
     ${OpenMP_CXX_LIBRARIES}
     ${CMAKE_DL_LIBS}
 )
