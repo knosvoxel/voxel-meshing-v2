@@ -5,11 +5,6 @@ struct VoxelData{
     uint four_voxels;
 };
 
-struct Quad{
-    float x, y, z;
-    uint packedData;
-};
-
 struct DrawElementsIndirectCommand{
     uint count;
     uint instanceCount;
@@ -21,7 +16,7 @@ struct DrawElementsIndirectCommand{
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout (binding = 0, std430) readonly restrict buffer ssbo { VoxelData voxels[]; };
-layout (binding = 1, std430) writeonly restrict buffer quad_buffer { Quad quads[]; };
+layout (binding = 1, std430) writeonly restrict buffer quad_buffer { uint64_t quads[]; };
 layout (binding = 2, std430) restrict buffer indirect_buffer { DrawElementsIndirectCommand indirect_command; };
 
 layout(location = 0) uniform vec3 model_size;
@@ -34,18 +29,23 @@ uint get_voxel(uint x, uint y, uint z, vec3 size) {
 void create_face(vec3 start, vec3 end, uint col, uint normal_idx) {
     // +1 because 'end' is inclusive
     float face_length = (end.z - start.z) + 1.0;    
-    
     uint quad_idx = atomicAdd(indirect_command.count, 1);
-
-    uint len_int = uint(face_length);
-    uint packed_val = (col & 255) | ((normal_idx & 7) << 8) | (len_int << 16);
-
+    
     float y_offset = (normal_idx == 5) ? 1.0 : 0.0;
 
-    quads[quad_idx].x = start.x;
-    quads[quad_idx].y = start.y + y_offset;
-    quads[quad_idx].z = start.z;
-    quads[quad_idx].packedData = packed_val;
+    uint64_t qx   = uint64_t(uint(start.x));
+    uint64_t qy   = uint64_t(uint(start.y + y_offset));
+    uint64_t qz   = uint64_t(uint(start.z));
+    uint64_t qlen = uint64_t(uint(face_length));
+    uint64_t qcol = uint64_t(col & 255u);
+    uint64_t qnorm = uint64_t(normal_idx & 7u);
+
+    quads[quad_idx] = qx
+                    | (qy   <<  9ul)
+                    | (qz   << 18ul)
+                    | (qlen << 27ul)
+                    | (qcol << 36ul)
+                    | (qnorm<< 44ul);
 }
 
 void main() {

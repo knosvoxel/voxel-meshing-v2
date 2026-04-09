@@ -29,9 +29,15 @@ typedef struct MeasurementData {
 	uint32 quadCount = 0;
 };
 
+// bits  0- 8: x (9 bits, 0-511)
+// bits  9-17: y
+// bits 18-26: z
+// bits 27-35: face_length (9 bits, 1-512)
+// bits 36-43: color (8 bits)
+// bits 44-46: normal (3 bits)
+// bits 47-63: unused
 typedef struct Quad {
-	float32 x, y, z; // mainly used for buffer size, actually float16 in compute shaders
-	uint32 packedData; // 4 Bytes: | 16 bits Length | 5 bits unused | 3 bits Normal | 8 bits Color |
+	uint64 data;
 };
 
 typedef struct DrawArraysIndirectCommand {
