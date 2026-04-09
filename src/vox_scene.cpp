@@ -226,7 +226,6 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	glBindVertexArray(sceneVAO);
 	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, sceneIndirectBuffer);
 
-	// count in each cmd is quadCount*6 (patched in buildSceneBuffers)
 	glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, numDrawCmds, 0);
 
 	glBindVertexArray(0);
