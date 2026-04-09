@@ -98,8 +98,8 @@ void Application::initOpenGL()
     glEnable(GL_DEPTH_TEST);
 
     glEnable(GL_CULL_FACE); // Enable culling
-    glEnable(GL_FRONT); // Cull front faces
-    glFrontFace(GL_CW);
+    glEnable(GL_BACK); // Cull front faces
+    glFrontFace(GL_CCW);
 
     //glEnable(GL_MULTISAMPLE);
     //glEnable(GL_DEBUG_OUTPUT);

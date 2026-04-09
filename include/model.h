@@ -6,18 +6,26 @@
 #include <glad/glad.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <cgltf/cgltf.h>
+
+#include <stb_image/stb_image.h>
+
+#include "shader.h"
 
 using namespace glm;
 
 struct MeshPrimitive {
-	uint32 vao;
-	uint32 vbo;
-	uint32 ibo;
-	GLsizei indexCount;
-	GLenum indexType;
-	void* indexOffset;
+    uint32 vao = 0;
+    std::vector<uint32> vbos;
+    uint32 ibo = 0;
+    GLsizei indexCount = 0;
+    GLenum indexType = GL_UNSIGNED_INT;
+    void* indexOffset = nullptr;
+    mat4 nodeTransform = mat4(1.0f);
+    int materialIndex = -1;
+    uint32 textureID = 0;
 };
 
 struct Model {
@@ -25,8 +33,9 @@ struct Model {
 	Model(const char* path);
 
 	void load(const char* path);
-	void render();
+	void render(Shader& shader, mat4 mvp);
 	void cleanup();
 
-	std::vector<MeshPrimitive> primitives;
+    std::vector<MeshPrimitive> primitives;
+    std::vector<uint32> textureIDs;
 };

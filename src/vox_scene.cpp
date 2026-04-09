@@ -24,9 +24,11 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 {
 	shader.use();
 	shader.setVec3("light_direction", normalize(vec3(-0.45f, -0.7f, -0.2f)));
-	shader.setMat4("mvp", mvp);
+	shader.setInt("uTexture", 0);
+	shader.setVec2("uTexOffset", vec2(0.03125f, 0.03125f));
+	shader.setVec2("uTexScale", vec2(15.0034342f, 10.0022898f));
 
-	model.render();
+	model.render(shader, mvp);
 
 	glBindVertexArray(0);
 }

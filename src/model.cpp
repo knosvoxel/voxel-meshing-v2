@@ -22,6 +22,20 @@ void Model::load(const char* path)
 		throw std::runtime_error("Failed to load glTF buffers");
 	}
 
+	std::cout << "Buffer data ptr: " << data->buffers[0].data << std::endl;
+	std::cout << "Buffer uri: " << (data->buffers[0].uri ? data->buffers[0].uri : "null") << std::endl;
+	std::cout << "Buffer size declared: " << data->buffers[0].size << std::endl;
+	std::cout << "Buffer data after load: " << data->buffers[0].data << std::endl;
+
+	// Try to manually load the bin next to the gltf
+	FILE* f = fopen("../../res/castle_optimized.bin", "rb");
+	std::cout << "Manual bin open: " << (f ? "yes" : "NO") << std::endl;
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		std::cout << "Bin file size: " << ftell(f) << std::endl;
+		fclose(f);
+	}
+
 	for (cgltf_size i = 0; i < data->meshes_count; ++i)
 		for (cgltf_size j = 0; j < data->meshes[i].primitives_count; ++j)
 		{
@@ -39,6 +53,7 @@ void Model::load(const char* path)
 
 				uint32 vbo;
 				glCreateBuffers(1, &vbo);
+				outPrim.vbos.push_back(vbo);
 
 				uint8* bufferData = (uint8*)view->buffer->data + view->offset;
 
@@ -51,9 +66,21 @@ void Model::load(const char* path)
 				else continue;
 
 				glEnableVertexArrayAttrib(outPrim.vao, loc);
-				glVertexArrayAttribFormat(outPrim.vao, loc, (int32)cgltf_num_components(accessor->type), GL_FLOAT, GL_FALSE, 0);
+				// Replace glVertexArrayAttribFormat call with type-aware version:
+				GLenum glType;
+				switch (accessor->component_type) {
+				case cgltf_component_type_r_8:   glType = GL_BYTE; break;
+				case cgltf_component_type_r_8u:  glType = GL_UNSIGNED_BYTE; break;
+				case cgltf_component_type_r_16:  glType = GL_SHORT; break;
+				case cgltf_component_type_r_16u: glType = GL_UNSIGNED_SHORT; break;
+				case cgltf_component_type_r_32u: glType = GL_UNSIGNED_INT; break;
+				case cgltf_component_type_r_32f: glType = GL_FLOAT; break;
+				default: glType = GL_FLOAT; break;
+				}
+				GLboolean normalized = accessor->normalized ? GL_TRUE : GL_FALSE;
+				glVertexArrayAttribFormat(outPrim.vao, loc, (GLint)cgltf_num_components(accessor->type), glType, normalized, 0);
 				glVertexArrayAttribBinding(outPrim.vao, loc, loc);
-				glVertexArrayVertexBuffer(outPrim.vao, loc, vbo, (int32)accessor->offset, (GLsizei)view->stride ? view->stride : accessor->stride);
+				glVertexArrayVertexBuffer(outPrim.vao, loc, vbo, (GLintptr)accessor->offset, (GLsizei)(view->stride ? view->stride : accessor->stride));
 			}
 
 			if (prim.indices) {
@@ -71,16 +98,104 @@ void Model::load(const char* path)
 				outPrim.indexOffset = (void*)accessor->offset;
 			}
 
+			if (prim.material) {
+				outPrim.materialIndex = (int)(prim.material - data->materials);
+			}
+
 			primitives.push_back(outPrim);
 		}
+
+	// After the primitives loop, read node transforms
+	for (cgltf_size i = 0; i < data->nodes_count; ++i) {
+		cgltf_node& node = data->nodes[i];
+		if (!node.mesh) continue;
+
+		mat4 transform = mat4(1.0f);
+		// cgltf can compute the full local matrix for you
+		float mtx[16];
+		cgltf_node_transform_local(&node, mtx);
+		transform = glm::make_mat4(mtx);
+
+		// Find which primitives belong to this mesh
+		for (cgltf_size j = 0; j < node.mesh->primitives_count; ++j) {
+			// Match by index offset into primitives array
+			size_t primIndex = (node.mesh - data->meshes) * node.mesh->primitives_count + j;
+			if (primIndex < primitives.size()) {
+				primitives[primIndex].nodeTransform = transform;
+			}
+		}
+	}
+
+	// Load textures
+	for (cgltf_size i = 0; i < data->materials_count; ++i) {
+		cgltf_material& mat = data->materials[i];
+		if (!mat.has_pbr_metallic_roughness) continue;
+
+		cgltf_texture_view& texView = mat.pbr_metallic_roughness.base_color_texture;
+		if (!texView.texture || !texView.texture->image) continue;
+
+		// In your texture loading loop, replace the uri path building with:
+		cgltf_image* img = texView.texture->image;
+
+		int width, height, channels;
+		unsigned char* imgData = nullptr;
+
+		if (img->buffer_view) {
+			// Texture is embedded in the bin
+			uint8* rawData = (uint8*)img->buffer_view->buffer->data + img->buffer_view->offset;
+			size_t rawSize = img->buffer_view->size;
+			imgData = stbi_load_from_memory(rawData, (int)rawSize, &width, &height, &channels, 4);
+		}
+		else if (img->uri) {
+			// External file
+			std::string texPath = std::string(path);
+			size_t lastSlash = texPath.find_last_of("/\\");
+			if (lastSlash != std::string::npos)
+				texPath = texPath.substr(0, lastSlash + 1) + img->uri;
+			else
+				texPath = img->uri;
+			imgData = stbi_load(texPath.c_str(), &width, &height, &channels, 4);
+		}
+
+		if (!imgData) {
+			std::cerr << "Failed to load texture" << std::endl;
+			continue;
+		}
+
+		uint32 texID;
+		glCreateTextures(GL_TEXTURE_2D, 1, &texID);
+		glTextureStorage2D(texID, 1, GL_RGBA8, width, height);
+		glTextureSubImage2D(texID, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, imgData);
+		glGenerateTextureMipmap(texID);
+		glTextureParameteri(texID, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTextureParameteri(texID, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTextureParameteri(texID, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTextureParameteri(texID, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+		stbi_image_free(imgData);
+		textureIDs.push_back(texID);
+
+		// Associate texture with primitives using this material
+		for (auto& prim : primitives) {
+			if (prim.materialIndex == (int)i) {
+				prim.textureID = texID;
+			}
+		}
+	}
 
 	cgltf_free(data);
 }
 
-void Model::render()
+void Model::render(Shader& shader, mat4 mvp)
 {
 	for (const auto& prim : primitives)
 	{
+		shader.setMat4("mvp", mvp * prim.nodeTransform);
+
+		if (prim.textureID != 0) {
+			glBindTextureUnit(0, prim.textureID);
+		}
+
 		glBindVertexArray(prim.vao);
 		if (prim.ibo != 0) {
 			glDrawElements(GL_TRIANGLES, prim.indexCount, prim.indexType, prim.indexOffset);
@@ -92,11 +207,12 @@ void Model::render()
 	glBindVertexArray(0);
 }
 
-void Model::cleanup()
-{
+void Model::cleanup() {
 	for (auto& prim : primitives) {
 		glDeleteVertexArrays(1, &prim.vao);
-		glDeleteBuffers(1, &prim.vbo);
+		glDeleteBuffers((GLsizei)prim.vbos.size(), prim.vbos.data());
 		if (prim.ibo) glDeleteBuffers(1, &prim.ibo);
 	}
+	if (!textureIDs.empty())
+		glDeleteTextures((GLsizei)textureIDs.size(), textureIDs.data());
 }

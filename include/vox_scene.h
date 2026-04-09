@@ -11,6 +11,10 @@ struct VoxScene {
 	~VoxScene() {};
 
 	VoxScene& operator=(VoxScene&& other) noexcept {
+		if (this != &other) {
+			model = std::move(other.model);
+			shader = std::move(other.shader);
+		}
 		return *this;
 	}
 
