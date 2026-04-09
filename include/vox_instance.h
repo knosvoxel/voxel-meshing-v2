@@ -13,9 +13,7 @@ typedef struct InstanceData {
 };
 
 typedef struct MeshingBuffers {
-	uint32 meshingSSBO_V;
-	uint32 meshingSSBO_I;
-	uint32 meshingSSBO_P;
+	uint32 meshingSSBO_Q;
 };
 
 typedef struct MeshingShaders {
@@ -28,20 +26,18 @@ typedef struct MeasurementData {
 	float64 meshGenerationDuration;
 	float64 dispatchPre; 
 	float64 dispatchPost;
-	uint32 vertexCount = 0;
-	uint32 indexCount = 0;
-	uint32 packedDataCount = 0;
+	uint32 quadCount = 0;
 };
 
-typedef struct Vertex {
-	int16 x, y, z; // mainly used for buffer size, actually float16 in compute shaders
+typedef struct Quad {
+	float32 x, y, z; // mainly used for buffer size, actually float16 in compute shaders
+	uint32 packedData; // 4 Bytes: | 16 bits Length | 5 bits unused | 3 bits Normal | 8 bits Color |
 };
 
-typedef struct DrawElementsIndirectCommand {
+typedef struct DrawArraysIndirectCommand {
 	uint32 count;
 	uint32 instanceCount;
-	uint32 firstIndex;
-	int32 baseVertex;
+	uint32 first;
 	uint32 baseInstance;
 };
 
@@ -56,17 +52,13 @@ struct VoxInstance {
 
 			// Move data
 			vao = other.vao;
-			ibo = other.ibo;
-			vertexSSBO = other.vertexSSBO;
-			packedSSBO = other.packedSSBO;
+			quadSSBO = other.quadSSBO;
 			indirectCommand = other.indirectCommand;
 			instanceDataBuffer = other.instanceDataBuffer;
 
 			// Leave the other object in a valid state
 			other.vao = 0;
-			other.ibo = 0;
-			other.vertexSSBO = 0;
-			other.packedSSBO = 0;
+			other.quadSSBO = 0;
 			other.indirectCommand = 0;
 			other.instanceDataBuffer = 0;
 		}
@@ -89,8 +81,6 @@ struct VoxInstance {
 	vec3 model_size;
 	mat4 transform;
 
-	uint32 //vbo = 0, 
-		vao = 0, 
-		ibo = 0, vertexSSBO = 0, packedSSBO = 0, rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
+	uint32 vao = 0, quadSSBO = 0, rotatedModelSSBO = 0, indirectCommand = 0, instanceDataBuffer = 0,
 		roundedSizeX = 0, roundedSizeY = 0, roundedSizeZ = 0;
 };

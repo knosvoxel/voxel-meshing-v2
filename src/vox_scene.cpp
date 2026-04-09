@@ -49,7 +49,7 @@ void VoxScene::load(const char* path)
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
-	if (!voxScene) 
+	if (!voxScene)
 	{
 		std::cerr << "Failed to load vox file at path: " << path << std::endl;
 		exit(-1);
@@ -58,14 +58,11 @@ void VoxScene::load(const char* path)
 
 	ogt_vox_palette ogt_palette = voxScene->palette;
 
-	// texture generation with DSA
 	glCreateTextures(GL_TEXTURE_2D, 1, &palette);
-
 	glTextureParameteri(palette, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTextureParameteri(palette, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTextureParameteri(palette, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTextureParameteri(palette, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
 	glTextureStorage2D(palette, 1, GL_RGBA8, 256, 1);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTextureSubImage2D(palette, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, ogt_palette.color);
@@ -76,42 +73,27 @@ void VoxScene::load(const char* path)
 
 	timer.stop();
 	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s\n" << std::endl;
-
 	std::cout << numInstances << " instance(s)\n" << std::endl;
+
 	auto meshingSSBOStart = timerTotal.elapsedMilliseconds();
 
-	// staging buffer size calculation based on which model is the biggest in the scene
-	// can also be replaced with simple "worst case" buffer size of 128 * 128 * 128
 	int32 maxSize = 0;
 	for (size_t i = 0; i < voxScene->num_models; i++) {
 		const ogt_vox_model* currModel = voxScene->models[i];
-
 		int32 currX = (currModel->size_x + 1) >> 1;
 		int32 currY = currModel->size_y;
 		int32 currZ = currModel->size_z;
-
 		int32 currSize = currX * currY * currZ;
-
 		if (currSize > maxSize) maxSize = currSize;
 	}
 
 	auto meshingSSBOEnd = timerTotal.elapsedMilliseconds();
 	std::cout << "meshingSSBO size calculation: " << meshingSSBOEnd - meshingSSBOStart << " ms\n" << std::endl;
 
-	// create temporary worst case buffer
-	glCreateBuffers(1, &buffers.meshingSSBO_V);
-	glCreateBuffers(1, &buffers.meshingSSBO_I);
-	glCreateBuffers(1, &buffers.meshingSSBO_P);
+	int64 maxQuads = (int64)maxSize * 3;
 
-	// 24 vertices per voxel max, 4 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_V, maxSize * sizeof(Vertex) * 6 * 4,
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
-	// 36 indices per voxel max, 6 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_I, maxSize * sizeof(uint32) * 6 * 6,
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
-	// 6 packed_data per voxel max, 1 on each side
-	glNamedBufferStorage(buffers.meshingSSBO_P, maxSize * sizeof(uint32) * 6 * 1,
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
+	glCreateBuffers(1, &buffers.meshingSSBO_Q);
+	glNamedBufferStorage(buffers.meshingSSBO_Q, maxQuads * sizeof(Quad), nullptr, GL_DYNAMIC_STORAGE_BIT);
 
 	instance_ranges.reserve(numInstances);
 
@@ -125,13 +107,12 @@ void VoxScene::load(const char* path)
 	float64 meshingDurationTotal = 0.0;
 	float64 meshingDurationMin = DBL_MAX;
 	float64 meshingDurationMax = 0.0;
-
 	float64 forPreGenerate = 0.0;
 	float64 forPostGenerate = 0.0;
-
 	float64 rotationComputeDurationTotal = 0.0;
 	float64 rotationDurationTotal = 0.0;
 	////////////////////////
+
 	timer.start();
 	for (size_t i = 0; i < numInstances; i++)
 	{
@@ -140,23 +121,18 @@ void VoxScene::load(const char* path)
 		const ogt_vox_instance* currInstance = &voxScene->instances[i];
 		const ogt_vox_model* currModel = voxScene->models[currInstance->model_index];
 
-		//voxelCount += count_solid_voxels_in_model(currModel);
-
 		ogt_vox_transform transform = ogt_vox_sample_instance_transform(currInstance, 0, voxScene);
-		ivec3 instanceOffset = ivec3(transform.m31, transform.m32, transform.m30); // swizzle offset into OpenGL coordinate space
+		ivec3 instanceOffset = ivec3(transform.m31, transform.m32, transform.m30);
 
 		ivec3 rotatedModelSize;
 		float64 rotationDuration = 0.0;
-
 		float64 rotPre = local.elapsedMilliseconds();
-		
-		// created rotated model with CPU or GPU
-		// CPU is more similar to ray marching version
+
 		uint32 rotatedModelSSBO = 0;
 #ifdef ROTATE_CPU
 		uint8* rotatedModelData = createRotatedModelCPU(voxScene, i, rotatedModelSize, rotationDuration);
 		glCreateBuffers(1, &rotatedModelSSBO);
-		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x* rotatedModelSize.y* rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
+		glNamedBufferStorage(rotatedModelSSBO, rotatedModelSize.x * rotatedModelSize.y * rotatedModelSize.z, rotatedModelData, GL_DYNAMIC_STORAGE_BIT);
 #else
 		createRotatedModelBuffer(voxScene, i, rotatedModelSSBO, applyRotationsCompute, rotatedModelSize, rotationDuration);
 #endif
@@ -168,24 +144,21 @@ void VoxScene::load(const char* path)
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
 
-		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, rotatedModelSize,instanceOffset, measurements);
+		instances.back().generateMesh(rotatedModelSSBO, buffers, meshingShaders, rotatedModelSize, instanceOffset, measurements);
 #ifdef ROTATE_CPU
-		instances.back().voxelData = rotatedModelData; // TODO: ERZEUGT DAS HIER EINEN MEMORY LEAK? Funktioniert aktuell auch nur auf CPU
-#endif // !ROTATE_CPU
+		instances.back().voxelData = rotatedModelData;
+#endif
 
 		VoxInstance& new_instance = instances.back();
-		DrawElementsIndirectCommand cmd;
+		DrawArraysIndirectCommand cmd;
 		glGetNamedBufferSubData(new_instance.indirectCommand, 0, sizeof(cmd), &cmd);
 
-		uint32 vertexCount = (cmd.count / 6) * 4;
-		uint32 faceCount = cmd.count / 6;
-		uint32 indexCount = cmd.count;
+		// cmd.count is now quad count (atomic increments by 1 per quad)
+		uint32 quadCount = cmd.count;
 
-		instance_ranges.push_back({ totalVertices, totalIndices, totalFaces, vertexCount, indexCount, faceCount, new_instance.transform });
+		instance_ranges.push_back({ totalQuads, quadCount, new_instance.transform });
 
-		totalVertices += vertexCount;
-		totalIndices += cmd.count;
-		totalFaces += faceCount;
+		totalQuads += quadCount;
 
 		local.start();
 		dispatchPreTotal += measurements.dispatchPre;
@@ -206,13 +179,10 @@ void VoxScene::load(const char* path)
 	timer.stop();
 
 	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
-
 	std::cout << "Meshing Loop Duration total: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
-
 	std::cout << "For loop pre generateMesh: " << forPreGenerate << "ms" << std::endl;
 	std::cout << " Rotation duration total: " << rotationDurationTotal << "ms" << std::endl;
 	std::cout << " Rotation compute duration total: " << rotationComputeDurationTotal / 1000.0 << "ms" << std::endl;
-
 	std::cout << "---------- generateMesh -------" << std::endl;
 	std::cout << " generateMesh pre  dispatch duration total: " << dispatchPreTotal << "ms\n" << std::endl;
 
@@ -220,9 +190,8 @@ void VoxScene::load(const char* path)
 	std::cout << " Meshing Compute duration: " << std::endl;
 	std::cout << "  Total: " << meshingDurationTotal << "us (" << meshingDurationTotal / 1000.0 << "ms)" << std::endl;
 	std::cout << "  Average: " << mean << "us" << std::endl;
-	std::cout << "  Min: " << (meshingDurationMin) << "us" << std::endl;
-	std::cout << "  Max: " << (meshingDurationMax) << "us\n" << std::endl;
-
+	std::cout << "  Min: " << meshingDurationMin << "us" << std::endl;
+	std::cout << "  Max: " << meshingDurationMax << "us\n" << std::endl;
 	std::cout << " generateMesh post dispatch duration total: " << dispatchPostTotal << "ms" << std::endl;
 	std::cout << "-------------------------------" << std::endl;
 	std::cout << "For loop post generateMesh: " << forPostGenerate << "ms\n" << std::endl;
@@ -230,19 +199,15 @@ void VoxScene::load(const char* path)
 	timer.start();
 	buildSceneBuffers(instance_ranges);
 	for (VoxInstance& inst : instances)
-		inst.cleanup();  // frees per-instance vao/ibo/vertexSSBO/packedSSBO/indirectCommand
+		inst.cleanup();
 	timer.stop();
 
 	std::cout << "Scene buffer building: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
-
-	glDeleteBuffers(1, &buffers.meshingSSBO_V);
-	glDeleteBuffers(1, &buffers.meshingSSBO_I);
-	glDeleteBuffers(1, &buffers.meshingSSBO_P);
+	glDeleteBuffers(1, &buffers.meshingSSBO_Q);
 
 	timerTotal.stop();
-
 	std::cout << "Scene creation total: " << timerTotal.elapsedSeconds() << " s" << std::endl;
 }
 
@@ -255,15 +220,14 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 	shader.setVec3("light_direction", -0.45f, -0.7f, -0.2f);
 	shader.setMat4("mvp", mvp);
 
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sceneVertexSSBO);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, scenePackedSSBO);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, sceneTransformSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sceneQuadSSBO);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, sceneTransformSSBO);
 
 	glBindVertexArray(sceneVAO);
 	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, sceneIndirectBuffer);
 
-	glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT,
-		nullptr, instances.size(), 0);
+	// count in each cmd is quadCount*6 (patched in buildSceneBuffers)
+	glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, numDrawCmds, 0);
 
 	glBindVertexArray(0);
 }
@@ -271,9 +235,7 @@ void VoxScene::render(mat4 mvp, float currentFrame)
 void VoxScene::cleanup()
 {
 	glDeleteVertexArrays(1, &sceneVAO);
-	glDeleteBuffers(1, &sceneVertexSSBO);
-	glDeleteBuffers(1, &scenePackedSSBO);
-	glDeleteBuffers(1, &sceneIBO);
+	glDeleteBuffers(1, &sceneQuadSSBO);
 	glDeleteBuffers(1, &sceneTransformSSBO);
 	glDeleteBuffers(1, &sceneIndirectBuffer);
 	glDeleteTextures(1, &palette);
@@ -439,29 +401,20 @@ uint8* VoxScene::createRotatedModelCPU(const ogt_vox_scene* scene, uint32 instan
 	return outData;
 }
 
-void VoxScene::rebaseIndices(uint32 srcIBO, uint32 dstIBO, const InstanceRange& instance_range)
-{
-	std::vector<uint32> indices(instance_range.indexCount);
-	glGetNamedBufferSubData(srcIBO, 0, sizeof(uint32) * instance_range.indexCount, indices.data());
-
-	for (uint32& idx : indices)
-		idx += instance_range.vertexOffset;
-
-	glNamedBufferSubData(dstIBO, sizeof(uint32) * instance_range.indexOffset, sizeof(uint32) * instance_range.indexCount, indices.data());
-}
-
 void VoxScene::buildSceneBuffers(const std::vector<InstanceRange>& ranges)
 {
-	glCreateBuffers(1, &sceneVertexSSBO);
-	glNamedBufferStorage(sceneVertexSSBO, sizeof(Vertex) * totalVertices, nullptr, GL_DYNAMIC_STORAGE_BIT);
+	glCreateBuffers(1, &sceneQuadSSBO);
+	glNamedBufferStorage(sceneQuadSSBO, sizeof(Quad) * totalQuads, nullptr, GL_DYNAMIC_STORAGE_BIT);
 
-	glCreateBuffers(1, &scenePackedSSBO);
-	glNamedBufferStorage(scenePackedSSBO, sizeof(uint32) * totalFaces, nullptr, GL_DYNAMIC_STORAGE_BIT);
+	// DrawArraysIndirectCommand: count, instanceCount, first, baseInstance
+	struct DrawArraysIndirectCommand {
+		uint32 count;         // quadCount * 6
+		uint32 instanceCount;
+		uint32 first;         // quadOffset * 6
+		uint32 baseInstance;  // indexes into transforms[]
+	};
 
-	glCreateBuffers(1, &sceneIBO);
-	glNamedBufferStorage(sceneIBO, sizeof(uint32) * totalIndices, nullptr, GL_DYNAMIC_STORAGE_BIT);
-
-	std::vector<DrawElementsIndirectCommand> cmds;
+	std::vector<DrawArraysIndirectCommand> cmds;
 	std::vector<mat4> transforms;
 	cmds.reserve(instances.size());
 	transforms.reserve(instances.size());
@@ -469,27 +422,38 @@ void VoxScene::buildSceneBuffers(const std::vector<InstanceRange>& ranges)
 	for (size_t i = 0; i < instances.size(); i++)
 	{
 		VoxInstance& curr_instance = instances[i];
-		const InstanceRange& curr_instance_range = ranges[i];
+		const InstanceRange& curr_range = ranges[i];
 
-		if (curr_instance_range.vertexCount == 0) continue;
+		if (curr_range.quadCount == 0) continue;
 
-		glCopyNamedBufferSubData(curr_instance.vertexSSBO, sceneVertexSSBO, 0, sizeof(Vertex) * curr_instance_range.vertexOffset, sizeof(Vertex) * curr_instance_range.vertexCount);
-		glCopyNamedBufferSubData(curr_instance.packedSSBO, scenePackedSSBO, 0, sizeof(uint32) * curr_instance_range.faceOffset, sizeof(uint32) * curr_instance_range.faceCount);
+		glCopyNamedBufferSubData(
+			curr_instance.quadSSBO, sceneQuadSSBO,
+			0,
+			sizeof(Quad) * curr_range.quadOffset,
+			sizeof(Quad) * curr_range.quadCount
+		);
 
-		rebaseIndices(curr_instance.ibo, sceneIBO, curr_instance_range);
-
-		DrawElementsIndirectCommand cmd{curr_instance_range.indexCount, 1, curr_instance_range.indexOffset, 0, (uint32)transforms.size()};
+		DrawArraysIndirectCommand cmd{};
+		cmd.count = curr_range.quadCount * 6;
+		cmd.instanceCount = 1;
+		cmd.first = curr_range.quadOffset * 6;
+		cmd.baseInstance = (uint32)transforms.size();
 		cmds.push_back(cmd);
-		transforms.push_back(curr_instance_range.transform);
+		transforms.push_back(curr_range.transform);
 	}
 
+	numDrawCmds = (uint32)cmds.size();
+
 	glCreateBuffers(1, &sceneIndirectBuffer);
-	glNamedBufferStorage(sceneIndirectBuffer, sizeof(DrawElementsIndirectCommand) * cmds.size(), cmds.data(), GL_DYNAMIC_STORAGE_BIT);
+	glNamedBufferStorage(sceneIndirectBuffer,
+		sizeof(DrawArraysIndirectCommand) * cmds.size(),
+		cmds.data(), GL_DYNAMIC_STORAGE_BIT);
 
 	glCreateBuffers(1, &sceneTransformSSBO);
-	glNamedBufferStorage(sceneTransformSSBO, sizeof(mat4) * transforms.size(), transforms.data(), GL_DYNAMIC_STORAGE_BIT);
+	glNamedBufferStorage(sceneTransformSSBO,
+		sizeof(mat4) * transforms.size(),
+		transforms.data(), GL_DYNAMIC_STORAGE_BIT);
 
+	// Empty VAO — no vertex attributes, all data pulled from SSBOs
 	glCreateVertexArrays(1, &sceneVAO);
-	glVertexArrayElementBuffer(sceneVAO, sceneIBO);
-			
 }

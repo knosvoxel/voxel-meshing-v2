@@ -99,7 +99,7 @@ void Application::initOpenGL()
 
     glEnable(GL_CULL_FACE); // Enable culling
     glEnable(GL_FRONT); // Cull front faces
-    glFrontFace(GL_CW);
+    glFrontFace(GL_CCW);
 
     //glEnable(GL_MULTISAMPLE);
     //glEnable(GL_DEBUG_OUTPUT);
@@ -202,9 +202,7 @@ void Application::renderImGuiFrame()
         }
     }
     ImGui::Separator();
-    ImGui::Text("Vertex Count: %1u (%1u faces)", scene.measurements.vertexCount, scene.measurements.vertexCount / 4);
-    ImGui::Text("Index Count: %1u", scene.measurements.indexCount);
-    ImGui::Text("Packed Data Count: %1u", scene.measurements.packedDataCount);
+    ImGui::Text("Quad Count: %1u", scene.measurements.quadCount);
     ImGui::Separator();
     ImGui::DragFloat3("Position", (float*)&cam.Position, 0.01f);
     ImGui::DragFloat("Movement Speed", (float*)&cam.MovementSpeed, 0.01, 0.0f, 0.0f, "%.1f");

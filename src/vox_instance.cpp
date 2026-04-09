@@ -12,23 +12,20 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
 
     rotatedModelSSBO = modelSSBO;
 
-    DrawElementsIndirectCommand indirectData{};
+    DrawArraysIndirectCommand indirectData{};
     indirectData.count = 0;
     indirectData.instanceCount = 1;
-    indirectData.firstIndex = 0;
-    indirectData.baseVertex = 0;
+    indirectData.first = 0;
     indirectData.baseInstance = 0;
 
     glCreateBuffers(1, &indirectCommand);
+    glNamedBufferStorage(indirectCommand, sizeof(DrawArraysIndirectCommand),
+        &indirectData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
 
-    glNamedBufferStorage(indirectCommand, sizeof(DrawElementsIndirectCommand), &indirectData, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
-
-    //compute shader call
+    // bindings: 0 = voxel data, 1 = quad staging, 2 = indirect
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, modelSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buffers.meshingSSBO_V); // temp buffer vertices
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, buffers.meshingSSBO_I); // temp buffer indices
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, buffers.meshingSSBO_P); // temp buffer packedData: Bytes | 0: 00000000 | 1: 00000000 | 2: normal index |3: color index |
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, indirectCommand);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buffers.meshingSSBO_Q);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, indirectCommand);
 
     uint32 meshingQuery;
     glGenQueries(1, &meshingQuery);
@@ -61,15 +58,10 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
     timer.start();
 
     // Readback
-    DrawElementsIndirectCommand commandData;
-    glGetNamedBufferSubData(indirectCommand, 0, sizeof(DrawElementsIndirectCommand), &commandData);
-    uint32 indexCount = commandData.count;
-    uint32 vertexCount = (indexCount / 6) * 4;
-    uint32 faceCount = indexCount / 6;
-
-    measurements.vertexCount += vertexCount;
-    measurements.indexCount += indexCount;
-    measurements.packedDataCount += faceCount;
+    DrawArraysIndirectCommand commandData;
+    glGetNamedBufferSubData(indirectCommand, 0, sizeof(DrawArraysIndirectCommand), &commandData);
+    uint32 quadCount = commandData.count;
+    measurements.quadCount += quadCount;
 
     int32 available = 0;
     while (!available) {
@@ -83,27 +75,18 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
 
     glDeleteQueries(1, &meshingQuery);
 
-    if (vertexCount > 0) {
-        glCreateBuffers(1, &vertexSSBO);
-        glNamedBufferStorage(vertexSSBO, sizeof(Vertex) * vertexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_V, vertexSSBO, 0, 0, sizeof(Vertex) * vertexCount);
-
-        glCreateBuffers(1, &packedSSBO);
-        glNamedBufferStorage(packedSSBO, sizeof(uint32) * faceCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_P, packedSSBO, 0, 0, sizeof(uint32) * faceCount);
-
-        glCreateBuffers(1, &ibo);
-        glNamedBufferStorage(ibo, sizeof(uint32) * indexCount, nullptr, GL_DYNAMIC_STORAGE_BIT);
-        glCopyNamedBufferSubData(buffers.meshingSSBO_I, ibo, 0, 0, sizeof(uint32) * indexCount);
+    if (quadCount > 0) {
+        glCreateBuffers(1, &quadSSBO);
+        glNamedBufferStorage(quadSSBO, sizeof(Quad) * quadCount,
+            nullptr, GL_DYNAMIC_STORAGE_BIT);
+        glCopyNamedBufferSubData(buffers.meshingSSBO_Q, quadSSBO,
+            0, 0, sizeof(Quad) * quadCount);
 
         glCreateVertexArrays(1, &vao);
-        glVertexArrayElementBuffer(vao, ibo);
     }
     else {
         vao = 0;
-        vertexSSBO = 0;
-        packedSSBO = 0;
-        ibo = 0;
+        quadSSBO = 0;
     }
     timer.stop();
     measurements.dispatchPost = timer.elapsedMilliseconds();
@@ -111,9 +94,7 @@ void VoxInstance::generateMesh(uint32 modelSSBO, MeshingBuffers& buffers, Meshin
 
 void VoxInstance::render()
 {
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, vertexSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, packedSSBO);
-
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, quadSSBO);
     glBindVertexArray(vao);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommand);
     glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0);
@@ -124,12 +105,9 @@ void VoxInstance::render()
 void VoxInstance::cleanup()
 {
     glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(1, &vertexSSBO);
-    glDeleteBuffers(1, &packedSSBO);
-    glDeleteBuffers(1, &ibo);
+    glDeleteBuffers(1, &quadSSBO);
     glDeleteBuffers(1, &indirectCommand);
     glDeleteBuffers(1, &instanceDataBuffer);
     glDeleteBuffers(1, &rotatedModelSSBO);
-    
     free(voxelData);
 }
