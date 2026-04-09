@@ -22,20 +22,6 @@ void Model::load(const char* path)
 		throw std::runtime_error("Failed to load glTF buffers");
 	}
 
-	std::cout << "Buffer data ptr: " << data->buffers[0].data << std::endl;
-	std::cout << "Buffer uri: " << (data->buffers[0].uri ? data->buffers[0].uri : "null") << std::endl;
-	std::cout << "Buffer size declared: " << data->buffers[0].size << std::endl;
-	std::cout << "Buffer data after load: " << data->buffers[0].data << std::endl;
-
-	// Try to manually load the bin next to the gltf
-	FILE* f = fopen("../../res/castle_optimized.bin", "rb");
-	std::cout << "Manual bin open: " << (f ? "yes" : "NO") << std::endl;
-	if (f) {
-		fseek(f, 0, SEEK_END);
-		std::cout << "Bin file size: " << ftell(f) << std::endl;
-		fclose(f);
-	}
-
 	for (cgltf_size i = 0; i < data->meshes_count; ++i)
 		for (cgltf_size j = 0; j < data->meshes[i].primitives_count; ++j)
 		{
@@ -66,7 +52,7 @@ void Model::load(const char* path)
 				else continue;
 
 				glEnableVertexArrayAttrib(outPrim.vao, loc);
-				// Replace glVertexArrayAttribFormat call with type-aware version:
+
 				GLenum glType;
 				switch (accessor->component_type) {
 				case cgltf_component_type_r_8:   glType = GL_BYTE; break;
@@ -105,20 +91,16 @@ void Model::load(const char* path)
 			primitives.push_back(outPrim);
 		}
 
-	// After the primitives loop, read node transforms
 	for (cgltf_size i = 0; i < data->nodes_count; ++i) {
 		cgltf_node& node = data->nodes[i];
 		if (!node.mesh) continue;
 
 		mat4 transform = mat4(1.0f);
-		// cgltf can compute the full local matrix for you
 		float mtx[16];
 		cgltf_node_transform_local(&node, mtx);
 		transform = glm::make_mat4(mtx);
 
-		// Find which primitives belong to this mesh
 		for (cgltf_size j = 0; j < node.mesh->primitives_count; ++j) {
-			// Match by index offset into primitives array
 			size_t primIndex = (node.mesh - data->meshes) * node.mesh->primitives_count + j;
 			if (primIndex < primitives.size()) {
 				primitives[primIndex].nodeTransform = transform;
@@ -134,20 +116,17 @@ void Model::load(const char* path)
 		cgltf_texture_view& texView = mat.pbr_metallic_roughness.base_color_texture;
 		if (!texView.texture || !texView.texture->image) continue;
 
-		// In your texture loading loop, replace the uri path building with:
 		cgltf_image* img = texView.texture->image;
 
 		int width, height, channels;
 		unsigned char* imgData = nullptr;
 
 		if (img->buffer_view) {
-			// Texture is embedded in the bin
 			uint8* rawData = (uint8*)img->buffer_view->buffer->data + img->buffer_view->offset;
 			size_t rawSize = img->buffer_view->size;
 			imgData = stbi_load_from_memory(rawData, (int)rawSize, &width, &height, &channels, 4);
 		}
 		else if (img->uri) {
-			// External file
 			std::string texPath = std::string(path);
 			size_t lastSlash = texPath.find_last_of("/\\");
 			if (lastSlash != std::string::npos)
@@ -175,7 +154,6 @@ void Model::load(const char* path)
 		stbi_image_free(imgData);
 		textureIDs.push_back(texID);
 
-		// Associate texture with primitives using this material
 		for (auto& prim : primitives) {
 			if (prim.materialIndex == (int)i) {
 				prim.textureID = texID;
