@@ -151,6 +151,7 @@ void Application::mainLoop()
 
         // input
         processInput();
+        updateCameraPath(deltaTime);
 
         glClearColor(0.20f, 0.20f, 0.20f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -208,6 +209,15 @@ void Application::renderImGuiFrame()
     ImGui::Separator();
     ImGui::DragFloat3("Position", (float*)&cam.Position, 0.01f);
     ImGui::DragFloat("Movement Speed", (float*)&cam.MovementSpeed, 0.01, 0.0f, 0.0f, "%.1f");
+    ImGui::Separator();
+    ImGui::Text("Camera Paths");
+    for (int i = 0; i < 10; i++) {
+        ImGui::Text("Track %d: %d keyframes", i, (int)cameraPaths[i].keyframes.size());
+        ImGui::SameLine();
+        if (ImGui::SmallButton(("Clear##" + std::to_string(i)).c_str()))
+            cameraPaths[i] = CameraPath{};
+    }
+    ImGui::DragFloat("Path Speed", &cameraPaths[activePathIdx >= 0 ? activePathIdx : 0].speed, 1.0f, 1.0f, 2000.0f);
     ImGui::End();
 
     ImGui::Render();
@@ -217,6 +227,7 @@ void Application::renderImGuiFrame()
 void Application::processInput()
 {
     if (!mouseCaught) return;
+    if (activePathIdx >= 0) return;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         cam.ProcessKeyboard(FORWARD, deltaTime);
@@ -226,6 +237,48 @@ void Application::processInput()
         cam.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         cam.ProcessKeyboard(RIGHT, deltaTime);
+}
+
+void Application::updateCameraPath(float32 delta)
+{
+    if (activePathIdx < 0) return;
+
+    CameraPath& path = cameraPaths[activePathIdx];
+    if (!path.active) return;
+
+    int32 nextIdx = path.currentIndex + 1;
+    if (nextIdx >= (int32)path.keyframes.size())
+    {
+        path.active = false;
+        activePathIdx = -1;
+        return;
+    }
+
+    const CameraKeyframe& target = path.keyframes[nextIdx];
+
+    vec3 toTarget = target.pos - cam.Position;
+    float32 dist = length(toTarget);
+    float32 moveDist = path.speed * delta;
+
+    if (dist <= moveDist)
+    {
+        cam.Position = target.pos;
+        path.currentIndex = nextIdx;
+    }
+    else
+    {
+        cam.Position += normalize(toTarget) * moveDist;
+    }
+
+    float32 t = clamp(moveDist / (dist + 0.0001f), 0.0f, 1.0f);
+
+    float32 yawDiff = target.yaw - cam.Yaw;
+    while (yawDiff > 180.0f) yawDiff -= 360.0f;
+    while (yawDiff < -180.0f) yawDiff = 360.0f;
+    cam.Yaw += yawDiff * t;
+    cam.Pitch += (target.pitch - cam.Pitch) * t;
+
+    cam.updateCameraVectors();
 }
 
 void Application::cleanup()
@@ -253,6 +306,7 @@ void mouseCallback(GLFWwindow* window, double xposIn, double yposIn)
     auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 
     if (!app->mouseCaught) return;
+    if (app->activePathIdx >= 0) return;
 
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
@@ -289,18 +343,69 @@ void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
 {
     auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    if (action == GLFW_PRESS)
     {
-        if (app->mouseCaught)
+        if (key == GLFW_KEY_ESCAPE)
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            app->mouseCaught = false;
+            if (app->activePathIdx >= 0)
+            {
+                app->cameraPaths[app->activePathIdx].active = false;
+                app->cameraPaths[app->activePathIdx].currentIndex = 0;
+                app->activePathIdx = -1;
+                return;
+            }
+
+            if (app->mouseCaught)
+            {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                app->mouseCaught = false;
+            }
+            else
+            {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                app->mouseCaught = true;
+                app->firstMouse = true;
+            }
         }
-        else
+
+        if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            app->mouseCaught = true;
-            app->firstMouse = true;
+            int32 trackIdx = key - GLFW_KEY_0;
+
+            if (mods & GLFW_MOD_SHIFT)
+            { 
+                CameraKeyframe frame;
+                frame.pos = app->cam.Position;
+                frame.yaw = app->cam.Yaw;
+                frame.pitch = app->cam.Pitch;
+                app->cameraPaths[trackIdx].keyframes.push_back(frame);
+                std::cout << "Recorded keyframe "
+                    << app->cameraPaths[trackIdx].keyframes.size()
+                    << " on track " << trackIdx << std::endl;
+            }
+            else
+            {
+                CameraPath& path = app->cameraPaths[trackIdx];
+                if (path.keyframes.size() >= 2)
+                {
+                    path.active = true;
+                    path.currentIndex = 0;
+                    app->activePathIdx = trackIdx;
+                    app->cam.Position = path.keyframes[0].pos;
+                    app->cam.Yaw = path.keyframes[0].yaw;
+                    app->cam.Pitch = path.keyframes[0].pitch;
+                    std::cout << "Playing track " << trackIdx << std::endl;
+                }
+            }
+        }
+
+        if (key == GLFW_KEY_F5)
+        {
+            savePaths(app->cameraPaths, "../../res/camera_paths.json");
+        }
+        if (key == GLFW_KEY_F9)
+        {
+            loadPaths(app->cameraPaths, "../../res/camera_paths.json");
         }
     }
 }
