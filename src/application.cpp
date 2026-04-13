@@ -209,13 +209,19 @@ void Application::renderImGuiFrame()
     ImGui::DragFloat("Movement Speed", (float*)&cam.MovementSpeed, 0.01, 0.0f, 0.0f, "%.1f");
     ImGui::Separator();
     ImGui::Text("Camera Paths");
+    ImGui::Text("Path File");
+    ImGui::InputText("##pathfile", cameraPathFileName, sizeof(cameraPathFileName));
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) savePaths(cameraPaths, cameraPathFileName);
+    ImGui::SameLine();
+    if (ImGui::Button("Load")) loadPaths(cameraPaths, cameraPathFileName);
+    ImGui::DragFloat("Path Speed", &cameraPaths[activePathIdx >= 0 ? activePathIdx : 0].speed, 1.0f, 1.0f, 2000.0f);
     for (int i = 0; i < 10; i++) {
         ImGui::Text("Track %d: %d keyframes", i, (int)cameraPaths[i].keyframes.size());
         ImGui::SameLine();
         if (ImGui::SmallButton(("Clear##" + std::to_string(i)).c_str()))
             cameraPaths[i] = CameraPath{};
     }
-    ImGui::DragFloat("Path Speed", &cameraPaths[activePathIdx >= 0 ? activePathIdx : 0].speed, 1.0f, 1.0f, 2000.0f);
     ImGui::End();
 
     ImGui::Render();
