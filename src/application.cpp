@@ -216,9 +216,64 @@ void Application::renderImGuiFrame()
     ImGui::SameLine();
     if (ImGui::Button("Load")) loadPaths(cameraPaths, cameraPathFileName);
     ImGui::DragFloat("Path Speed", &cameraPaths[activePathIdx >= 0 ? activePathIdx : 0].speed, 1.0f, 1.0f, 2000.0f);
-    for (int i = 0; i < 10; i++) {
-        ImGui::Text("Track %d: %d keyframes", i, (int)cameraPaths[i].keyframes.size());
+
+    for (int i = 0; i < 10; i++)
+    {
+        bool isPlaying = (activePathIdx == i);
+
+        if (isPlaying)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.2f, 1.0f));
+
+        ImGui::Text("Track %d: %2d keyframes", i, (int)cameraPaths[i].keyframes.size());
+
+        if (isPlaying)
+            ImGui::PopStyleColor();
+
         ImGui::SameLine();
+
+        bool hasEnoughFrames = cameraPaths[i].keyframes.size() >= 2;
+        if (isPlaying)
+        {
+            if (ImGui::SmallButton(("Stop##" + std::to_string(i)).c_str()))
+            {
+                cameraPaths[activePathIdx].active = false;
+                cameraPaths[activePathIdx].currentIndex = 0;
+                activePathIdx = -1;
+            }
+        }
+        else
+        {
+            if (!hasEnoughFrames)
+                ImGui::BeginDisabled();
+
+            if (ImGui::SmallButton(("Play##" + std::to_string(i)).c_str()))
+            {
+                cameraPaths[i].active = true;
+                cameraPaths[i].currentIndex = 0;
+                activePathIdx = i;
+                cam.Position = cameraPaths[i].keyframes[0].pos;
+                cam.Yaw = cameraPaths[i].keyframes[0].yaw;
+                cam.Pitch = cameraPaths[i].keyframes[0].pitch;
+                cam.updateCameraVectors();
+            }
+
+            if (!hasEnoughFrames)
+                ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton(("+ Frame##" + std::to_string(i)).c_str()))
+        {
+            CameraKeyframe keyframe;
+            keyframe.pos = cam.Position;
+            keyframe.yaw = cam.Yaw;
+            keyframe.pitch = cam.Pitch;
+            cameraPaths[i].keyframes.push_back(keyframe);
+        }
+
+        ImGui::SameLine();
+
         if (ImGui::SmallButton(("Clear##" + std::to_string(i)).c_str()))
             cameraPaths[i] = CameraPath{};
     }
