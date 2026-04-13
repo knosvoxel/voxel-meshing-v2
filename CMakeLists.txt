@@ -85,6 +85,10 @@ add_subdirectory("${OGT_VOX_DIR}")
 set(STB_IMAGE_FOLDER "${LIB_DIR}/stb_image")
 add_subdirectory("${STB_IMAGE_FOLDER}")
 
+# json
+set(JSON_FOLDER "${LIB_DIR}/nlohmann")
+add_subdirectory("${JSON_FOLDER}")
+
 target_link_libraries(${PROJECT_NAME} 
     "glfw" 
     "glad" 
