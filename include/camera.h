@@ -18,9 +18,8 @@ const float SPEED = 100.0f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
 
-class Camera
+struct Camera
 {
-public:
 	// camera Attributes
 	glm::vec3 Position;
 	glm::vec3 Front;
@@ -48,6 +47,5 @@ public:
 
 	void ProcessMouseScroll(float yoffset);
 
-private:
 	void updateCameraVectors();
 };

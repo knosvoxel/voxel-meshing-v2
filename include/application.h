@@ -15,6 +15,8 @@
 #include <imgui_impl_opengl3.h>
 
 #include "camera.h"
+#include "camera_path.h"
+
 #include "line.h"
 #include "vox_scene.h"
 #include "timer.h"
@@ -32,6 +34,9 @@ public:
 	bool firstMouse = true;
 
 	Camera cam;
+	CameraPath cameraPaths[10];
+	int32 activePathIdx = -1;
+
 	VoxScene scene;
 
 private:
@@ -44,6 +49,8 @@ private:
 	void renderImGuiFrame();
 
 	void processInput();
+
+	void updateCameraPath(float32 delta);
 
 	void cleanup();
 
