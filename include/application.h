@@ -36,6 +36,7 @@ public:
 	Camera cam;
 	CameraPath cameraPaths[10];
 	int32 activePathIdx = -1;
+	char cameraPathFileName[256] = "../../res/camera_paths.json";
 
 	VoxScene scene;
 
