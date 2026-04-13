@@ -86,6 +86,10 @@ add_subdirectory("${OGT_VOX_DIR}")
 set(STB_IMAGE_FOLDER "${LIB_DIR}/stb_image")
 add_subdirectory("${STB_IMAGE_FOLDER}")
 
+# json
+set(JSON_FOLDER "${LIB_DIR}/nlohmann")
+add_subdirectory("${JSON_FOLDER}")
+
 # cgltf
 set(CGLTF_FOLDER "${LIB_DIR}/cgltf")
 add_subdirectory("${CGLTF_FOLDER}")
