@@ -46,18 +46,22 @@ void VoxScene::load(const char* path)
 	meshingShaders.meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
 	meshingShaders.meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
 
+	timer.stop();
 	timings.shaderLoadMs = timer.elapsedMilliseconds();
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
+	timer.start();
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
 	if (!voxScene) 
 	{
 		std::cerr << "Failed to load vox file at path: " << path << std::endl;
 		exit(-1);
 	}
+	timer.stop();
 	std::cout << "Scene load done: " << timer.elapsedSeconds() << " s" << std::endl;
-	timings.sceneFileLoadMs = timer.elapsedMilliseconds() - timings.shaderLoadMs;
+	timings.sceneFileLoadMs = timer.elapsedMilliseconds();
 
+	timer.start();
 	ogt_vox_palette ogt_palette = voxScene->palette;
 
 	// texture generation with DSA
@@ -72,14 +76,13 @@ void VoxScene::load(const char* path)
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTextureSubImage2D(palette, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, ogt_palette.color);
 	glBindImageTexture(0, palette, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
+	timer.stop();
+	timings.paletteOverheadMs = timer.elapsedMilliseconds();
 
-	timings.paletteOverheadMs = timer.elapsedMilliseconds() - (timings.shaderLoadMs + timings.sceneFileLoadMs);
+	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s\n" << std::endl;
 
 	numInstances = voxScene->num_instances;
 	instances.reserve(numInstances);
-
-	timer.stop();
-	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s\n" << std::endl;
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 	auto meshingSSBOStart = timerTotal.elapsedMilliseconds();
@@ -136,6 +139,7 @@ void VoxScene::load(const char* path)
 	float64 rotationComputeDurationTotal = 0.0;
 	float64 rotationDurationTotal = 0.0;
 	////////////////////////
+
 	timer.start();
 	for (size_t i = 0; i < numInstances; i++)
 	{
