@@ -218,7 +218,6 @@ void VoxScene::load(const char* path)
 	std::cout << " Rotation duration total: " << rotationDurationTotal << "ms" << std::endl;
 	timings.rotationTotalMs = rotationDurationTotal;
 	std::cout << " Rotation compute duration total: " << rotationComputeDurationTotal / 1000.0 << "ms" << std::endl;
-	timings.rotationComputeMs = rotationComputeDurationTotal / 1000.0;
 	std::cout << "---------- generateMesh -------" << std::endl;
 	std::cout << " generateMesh pre  dispatch duration total: " << dispatchPreTotal << "ms\n" << std::endl;
 
@@ -232,7 +231,6 @@ void VoxScene::load(const char* path)
 	timings.meshingAvgUs = mean;
 	timings.meshingMinUs = meshingDurationMin;
 	timings.meshingMaxUs = meshingDurationMax;
-	timings.sceneBufferBuildMs = timer.elapsedMilliseconds();
 
 	std::cout << " generateMesh post dispatch duration total: " << dispatchPostTotal << "ms" << std::endl;
 	std::cout << "-------------------------------" << std::endl;
@@ -243,6 +241,8 @@ void VoxScene::load(const char* path)
 	for (VoxInstance& inst : instances)
 		inst.cleanup();  // frees per-instance vao/ibo/vertexSSBO/packedSSBO/indirectCommand
 	timer.stop();
+
+	timings.sceneBufferBuildMs = timer.elapsedMilliseconds();
 
 	std::cout << "Scene buffer building: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
 

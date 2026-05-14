@@ -57,7 +57,6 @@ void BenchmarkRunner::runPreprocessingPhase()
         << ",scene_file_load_ms"
         << ",palette_overhead_ms"
         << ",rotation_total_ms"
-        << ",rotation_compute_ms"
         << ",meshing_total_ms"
         << ",meshing_avg_us"
         << ",meshing_min_us"
@@ -114,7 +113,6 @@ void BenchmarkRunner::runPreprocessingPhase()
                 << "," << t.sceneFileLoadMs
                 << "," << t.paletteOverheadMs
                 << "," << t.rotationTotalMs
-                << "," << t.rotationComputeMs
                 << "," << t.meshingLoopMs
                 << "," << t.meshingAvgUs
                 << "," << t.meshingMinUs
