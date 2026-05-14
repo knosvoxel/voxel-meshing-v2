@@ -28,7 +28,6 @@ struct SceneTimings
 	float64 sceneFileLoadMs = 0;
 	float64 paletteOverheadMs = 0;
 	float64 rotationTotalMs = 0;
-	float64 rotationComputeMs = 0;
 	float64 meshingLoopMs = 0;
 	float64 meshingAvgUs = 0;
 	float64 meshingMinUs = 0;
