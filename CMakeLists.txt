@@ -16,6 +16,7 @@ set(SOURCES
 	"${SRC_DIR}/line.cpp" 
 	"${SRC_DIR}/vox_instance.cpp" 
 	"${SRC_DIR}/vox_scene.cpp"
+	"${SRC_DIR}/benchmark_runner.cpp"
 )
 
 # Executable definition and properties

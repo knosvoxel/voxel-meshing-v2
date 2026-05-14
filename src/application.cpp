@@ -35,7 +35,9 @@ void Application::init()
 
     initWindow();
     initOpenGL();
-    initImgui();
+
+    if (!benchmarkMode)
+        initImgui();
 
     cam = Camera(CAM_POS, vec3(0.0f, 1.0f, 0.0f), YAW, PITCH);
     lastX = static_cast<float>(sizeX) / 2.0f;
@@ -45,7 +47,8 @@ void Application::init()
     coordY = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 1000.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
     coordZ = Line(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, 1000.0f), vec3(0.0f, 0.0f, 1.0f));
 
-    scene.load(VOX_FILE_PATH);
+    const char* scenePath = overrideScenePath.empty() ? VOX_FILE_PATH : overrideScenePath.c_str();
+    scene.load(scenePath);
 
     timer.stop();
     std::cout << "init total: " << timer.elapsedSeconds() << " s" << std::endl;
@@ -77,7 +80,8 @@ void Application::initWindow()
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
     glfwSetKeyCallback(window, keyboardCallback);
 
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (!benchmarkMode)
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (!enableVSync) {
         glfwSwapInterval(0);
@@ -340,15 +344,25 @@ void Application::updateCameraPath(float32 delta)
     cam.updateCameraVectors();
 }
 
+void Application::cleanupWindow()
+{
+    if (!benchmarkMode)
+    {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    window = nullptr;
+}
+
 void Application::cleanup()
 {
     scene.cleanup();
 
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
-
-	glfwTerminate();
+    cleanupWindow();
 }
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height)
