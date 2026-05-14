@@ -1,22 +1,36 @@
 #include "application.h"
+#include "benchmark_runner.h"
 
-//#ifndef _DEBUG
-//
-//#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
-//
-//#endif
+#include <cstring>
+#include <iostream>
 
-int main() {
-	Application app;
+static bool hasFlag(int argc, char** argv, const char* flag)
+{
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], flag) == 0) return true;
+    return false;
+}
 
-	try {
-		app.run();
-	}
-	catch (const std::exception& e)
-	{
-		std::cerr << e.what() << std::endl;
-		return EXIT_FAILURE;
-	}
+int main(int argc, char** argv)
+{
+    if (hasFlag(argc, argv, "--bench"))
+    {
+        auto cfg = BenchmarkConfig::parse(argc, argv);
+        if (!cfg) return EXIT_FAILURE;
 
-	return EXIT_SUCCESS;
+        BenchmarkRunner runner(std::move(*cfg));
+        runner.run();
+        return EXIT_SUCCESS;
+    }
+
+    // Normal interactive run
+    Application app;
+    try {
+        app.run();
+    }
+    catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

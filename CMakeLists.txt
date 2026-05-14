@@ -16,13 +16,14 @@ set(SOURCES
 	"${SRC_DIR}/line.cpp" 
 	"${SRC_DIR}/vox_instance.cpp" 
 	"${SRC_DIR}/vox_scene.cpp"
+	"${SRC_DIR}/benchmark_runner.cpp"
 )
 
 # Executable definition and properties
-add_executable(${PROJECT_NAME} ${SOURCES})
-target_include_directories(${PROJECT_NAME} PRIVATE "${SRC_DIR}")
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_executable(${PROJECT_NAME} ${SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE "${SRC_DIR}")
 
 if(MSVC)
     # Apply optimizations ONLY in Release, MinSizeRel, or RelWithDebInfo

@@ -46,6 +46,7 @@ void VoxScene::load(const char* path)
 	meshingShaders.meshingComputeY = ComputeShader("../../shader/slicing_y.comp");
 	meshingShaders.meshingComputeZ = ComputeShader("../../shader/slicing_z.comp");
 
+	timings.shaderLoadMs = timer.elapsedMilliseconds();
 	std::cout << "Shader load done: " << timer.elapsedSeconds() << " s" << std::endl;
 
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
@@ -55,6 +56,7 @@ void VoxScene::load(const char* path)
 		exit(-1);
 	}
 	std::cout << "Scene load done: " << timer.elapsedSeconds() << " s" << std::endl;
+	timings.sceneFileLoadMs = timer.elapsedMilliseconds() - timings.shaderLoadMs;
 
 	ogt_vox_palette ogt_palette = voxScene->palette;
 
@@ -70,6 +72,8 @@ void VoxScene::load(const char* path)
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTextureSubImage2D(palette, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, ogt_palette.color);
 	glBindImageTexture(0, palette, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
+
+	timings.paletteOverheadMs = timer.elapsedMilliseconds() - (timings.shaderLoadMs + timings.sceneFileLoadMs);
 
 	numInstances = voxScene->num_instances;
 	instances.reserve(numInstances);
@@ -207,12 +211,14 @@ void VoxScene::load(const char* path)
 
 	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << "\n" << std::endl;
 
+	timings.meshingLoopMs = timer.elapsedMilliseconds();
 	std::cout << "Meshing Loop Duration total: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
 
 	std::cout << "For loop pre generateMesh: " << forPreGenerate << "ms" << std::endl;
 	std::cout << " Rotation duration total: " << rotationDurationTotal << "ms" << std::endl;
+	timings.rotationTotalMs = rotationDurationTotal;
 	std::cout << " Rotation compute duration total: " << rotationComputeDurationTotal / 1000.0 << "ms" << std::endl;
-
+	timings.rotationComputeMs = rotationComputeDurationTotal / 1000.0;
 	std::cout << "---------- generateMesh -------" << std::endl;
 	std::cout << " generateMesh pre  dispatch duration total: " << dispatchPreTotal << "ms\n" << std::endl;
 
@@ -222,6 +228,11 @@ void VoxScene::load(const char* path)
 	std::cout << "  Average: " << mean << "us" << std::endl;
 	std::cout << "  Min: " << (meshingDurationMin) << "us" << std::endl;
 	std::cout << "  Max: " << (meshingDurationMax) << "us\n" << std::endl;
+
+	timings.meshingAvgUs = mean;
+	timings.meshingMinUs = meshingDurationMin;
+	timings.meshingMaxUs = meshingDurationMax;
+	timings.sceneBufferBuildMs = timer.elapsedMilliseconds();
 
 	std::cout << " generateMesh post dispatch duration total: " << dispatchPostTotal << "ms" << std::endl;
 	std::cout << "-------------------------------" << std::endl;
@@ -283,7 +294,7 @@ void VoxScene::createRotatedModelBuffer(const ogt_vox_scene* scene, uint32 insta
 {
 	const ogt_vox_instance& instance = scene->instances[instanceIdx];
 	const ogt_vox_model* model = scene->models[instance.model_index];
-	mat4& transformMat = ogtTransformToGLM(scene, instance, model);
+	const mat4& transformMat = ogtTransformToGLM(scene, instance, model);
 
 	vec3 corners[8] = {
 		{0, 0, 0},

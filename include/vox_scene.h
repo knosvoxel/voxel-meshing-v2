@@ -32,6 +32,20 @@ struct InstanceRange {
 	mat4   transform;
 };
 
+struct SceneTimings
+{
+	float64 shaderLoadMs = 0;
+	float64 sceneFileLoadMs = 0;
+	float64 paletteOverheadMs = 0;
+	float64 rotationTotalMs = 0;
+	float64 rotationComputeMs = 0;
+	float64 meshingLoopMs = 0;
+	float64 meshingAvgUs = 0;
+	float64 meshingMinUs = 0;
+	float64 meshingMaxUs = 0;
+	float64 sceneBufferBuildMs = 0;
+};
+
 struct VoxScene {
 	VoxScene() {};
 	~VoxScene() {};
@@ -70,6 +84,7 @@ struct VoxScene {
 
 	float64 total_draw_call_duration = 0.0;
 	
+	SceneTimings timings;
 
 	uint32 sceneVAO = 0;
 	uint32 sceneVertexSSBO = 0;

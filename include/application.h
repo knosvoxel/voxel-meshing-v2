@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -27,6 +28,13 @@ class Application {
 public:
 	void run();
 
+	void initWindow();
+	void initOpenGL();
+
+	void updateCameraPath(float32 delta);
+
+	void cleanupWindow();
+
 	float lastX = 0.0f, lastY = 0.0f, deltaTime = 0.0f, lastFrame = 0.0f;
 	uint32 sizeX = 0.0, sizeY = 0.0;
 
@@ -37,13 +45,16 @@ public:
 	CameraPath cameraPaths[10];
 	int32 activePathIdx = -1;
 	char cameraPathFileName[256] = "../../res/camera_paths.json";
+	
+	GLFWwindow* window;
 
 	VoxScene scene;
 
+	bool benchmarkMode = false;
+	std::string overrideScenePath;
+
 private:
 	void init();
-	void initWindow();
-	void initOpenGL();
 	void initImgui();
 
 	void mainLoop();
@@ -51,11 +62,8 @@ private:
 
 	void processInput();
 
-	void updateCameraPath(float32 delta);
-
 	void cleanup();
 
-	GLFWwindow* window;
 	bool enableVSync = false;
 	bool enableWireframe = false;
 
