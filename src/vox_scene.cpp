@@ -67,17 +67,21 @@ void VoxScene::load(const char* path)
 	timerTotal.start();
 	shader = Shader("../../shader/shader.vert", "../../shader/shader.frag");
 
+	timer.stop();
 	timings.shaderLoadMs = timer.elapsedMilliseconds();
 
+	timer.start();
 	const ogt_vox_scene* voxScene = load_vox_scene(path);
 	if (!voxScene) 
 	{
 		std::cerr << "Failed to load vox file at path: " << path << std::endl;
 		exit(-1);
 	}
+	timer.stop();
 	std::cout << "Scene load done: " << timer.elapsedSeconds() << " s" << std::endl;
-	timings.sceneFileLoadMs = timer.elapsedMilliseconds() - timings.shaderLoadMs;
+	timings.sceneFileLoadMs = timer.elapsedMilliseconds();
 
+	timer.start();
 	ogt_vox_palette ogt_palette = voxScene->palette;
 
 	// texture generation with DSA
@@ -93,13 +97,13 @@ void VoxScene::load(const char* path)
 	glTextureSubImage2D(palette, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, ogt_palette.color);
 	glBindImageTexture(0, palette, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
 
-	timings.paletteOverheadMs = timer.elapsedMilliseconds() - (timings.shaderLoadMs + timings.sceneFileLoadMs);
+	timer.stop();
+	timings.paletteOverheadMs = timer.elapsedMilliseconds();
 
 	numInstances = voxScene->num_instances;
 	instances.reserve(numInstances);
 
-	timer.stop();
-	std::cout << "Scene Shader & palette overhead total: " << timer.elapsedSeconds() << " s\n" << std::endl;
+	std::cout << "Scene Shader & palette overhead total: " << timerTotal.elapsedSeconds() << " s\n" << std::endl;
 
 	std::cout << numInstances << " instance(s)\n" << std::endl;
 
@@ -128,8 +132,6 @@ void VoxScene::load(const char* path)
 
 	////////////////////////
 	timer.start();
-
-
 	for (size_t i = 0; i < numInstances; i++)
 	{
 		measurements = MeasurementData{};
@@ -158,6 +160,7 @@ void VoxScene::load(const char* path)
 		local.stop();
 		forPreGenerate += local.elapsedMilliseconds();
 		instances.back().generateInstanceMesh(rotatedModelData, rotatedModelSize, instanceOffset, measurements);
+		free(rotatedModelData);
 
 		meshPreTotal += measurements.meshPre;
 		meshInstanceChunksTotal += measurements.meshInstanceChunks;
@@ -178,22 +181,21 @@ void VoxScene::load(const char* path)
 		totalSizeZ += currModel->size_z;
 	}
 
-	uint64 curr = timer.elapsedMilliseconds();
-
-	buildSceneBuffers();
-
-	timings.sceneBufferBuildMs = timer.elapsedMilliseconds() - curr;
-
 	timer.stop();
+	timings.meshingLoopMs = timer.elapsedMilliseconds();
+
+	timer.start();
+	buildSceneBuffers();
+	timer.stop();
+
+	timings.sceneBufferBuildMs = timer.elapsedMilliseconds();
 
 	std::cout << "\n\nAmount of chunks: " << chunk_count << std::endl;
 
 	std::cout << "Average instance size: " << totalSizeX / numInstances << " " << totalSizeY / numInstances << " " << totalSizeZ / numInstances << std::endl;
 	std::cout << "Average amount of chunks per instance: " << chunk_count / numInstances << "\n" << std::endl;
 
-	std::cout << "Meshing Loop Duration total: " << timer.elapsedMilliseconds() << "ms\n" << std::endl;
-
-	timings.meshingLoopMs = timer.elapsedMilliseconds();
+	std::cout << "Meshing Loop Duration total: " << timings.meshingLoopMs << "ms\n" << std::endl;
 
 	std::cout << "For loop pre generateMesh: " << forPreGenerate << "ms" << std::endl;
 	std::cout << " Rotation duration total: " << rotationDurationTotal << "ms" << std::endl;
@@ -232,7 +234,7 @@ void VoxScene::load(const char* path)
 	std::cout << " instance buffer creation average: " << meshPostTotal / numInstances << "ms" << std::endl;
 	std::cout << "-------------------------------" << std::endl;
 
-	std::cout << "Combine instance buffers into scene buffer: " << timer.elapsedMilliseconds() - curr << "ms\n" << std::endl;
+	std::cout << "Combine instance buffers into scene buffer: " << timings.sceneBufferBuildMs << "ms\n" << std::endl;
 
 	ogt_vox_destroy_scene(voxScene);
 
