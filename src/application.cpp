@@ -76,7 +76,8 @@ void Application::initWindow()
     glfwSetWindowUserPointer(window, this);
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-    glfwSetCursorPosCallback(window, mouseCallback);
+    if (!benchmarkMode)
+        glfwSetCursorPosCallback(window, mouseCallback);
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
     glfwSetKeyCallback(window, keyboardCallback);
 
