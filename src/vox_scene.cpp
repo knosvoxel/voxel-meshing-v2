@@ -210,6 +210,7 @@ void VoxScene::load(const char* path)
 	std::cout << "  Min: " << (meshingDurationMin) << "ms" << std::endl;
 	std::cout << "  Max: " << (meshingDurationMax) << "ms\n" << std::endl;
 
+	timings.meshingTotalMs = meshingDurationTotal;
 	timings.meshingAvgUs = mean;
 	timings.meshingMinUs = meshingDurationMin;
 	timings.meshingMaxUs = meshingDurationMax;
