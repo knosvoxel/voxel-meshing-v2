@@ -1,7 +1,7 @@
 #include "application.h"
 
-const uint32 WIDTH = 1600;
-const uint32 HEIGHT = 900;
+const uint32 WIDTH = 2560;
+const uint32 HEIGHT = 1440;
 
 const char* WINDOW_NAME = "Voxel Meshing BGM";
 const char* VOX_FILE_PATH = "../../res/castle.vox";
