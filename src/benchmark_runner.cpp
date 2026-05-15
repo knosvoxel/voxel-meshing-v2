@@ -48,8 +48,6 @@ void BenchmarkRunner::runPreprocessingPhase()
     std::ofstream csv(outPath);
     if (!csv) { std::cerr << "[Bench] ERROR: cannot open " << outPath << "\n"; return; }
 
-    csv << "sep=,\n";
-
     // Header
     csv << "iteration"
         << ",total_preprocess_ms"
@@ -156,8 +154,6 @@ void BenchmarkRunner::runFramePhase()
     if (!csv) { std::cerr << "[Bench] ERROR: cannot open " << outPath << "\n"; return; }
 
     csv.imbue(std::locale::classic());
-
-    csv << "sep=,\n";
 
     csv << "frame,frame_time_ms," << MemorySnapshot::csvHeader() << "\n";
 
