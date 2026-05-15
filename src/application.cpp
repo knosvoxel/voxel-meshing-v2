@@ -76,7 +76,8 @@ void Application::initWindow()
     glfwSetWindowUserPointer(window, this);
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-    glfwSetCursorPosCallback(window, mouseCallback);
+    if (!benchmarkMode)
+        glfwSetCursorPosCallback(window, mouseCallback);
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
     glfwSetKeyCallback(window, keyboardCallback);
 
@@ -213,6 +214,8 @@ void Application::renderImGuiFrame()
     ImGui::Separator();
     ImGui::DragFloat3("Position", (float*)&cam.Position, 0.01f);
     ImGui::DragFloat("Movement Speed", (float*)&cam.MovementSpeed, 0.01, 0.0f, 0.0f, "%.1f");
+    ImGui::DragFloat("Pitch", (float*)&cam.Pitch, 0.01, 0.0f, 0.0f, "%.1f");
+    ImGui::DragFloat("Yaw", (float*)&cam.Yaw, 0.01, 0.0f, 0.0f, "%.1f");
     ImGui::Separator();
     ImGui::Text("Camera Paths");
     ImGui::Text("Path File");

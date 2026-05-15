@@ -189,6 +189,13 @@ void BenchmarkRunner::runFramePhase()
         path.currentIndex = 0;
 
         glm::vec3 diff = path.keyframes[1].pos - path.keyframes[0].pos;
+        float distance = glm::length(diff);
+        if (m_cfg.frameDurationSec > 0.0f) {
+            path.speed = distance / m_cfg.frameDurationSec;
+        }
+        else {
+            path.speed = 0.0f;
+        }
 
         app.activePathIdx = m_cfg.trackIndex;
     }
