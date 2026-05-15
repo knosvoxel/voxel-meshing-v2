@@ -37,8 +37,10 @@ struct SceneTimings
 	float64 shaderLoadMs = 0;
 	float64 sceneFileLoadMs = 0;
 	float64 paletteOverheadMs = 0;
-	float64 rotationTotalMs = 0;
 	float64 meshingLoopMs = 0;
+	float64 rotationTotalMs = 0;
+	float64 meshingTotalMs = 0;
+	float64 bufferCopyingDurationTotalMs = 0;
 	float64 meshingAvgUs = 0;
 	float64 meshingMinUs = 0;
 	float64 meshingMaxUs = 0;
