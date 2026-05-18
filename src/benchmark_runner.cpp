@@ -51,7 +51,6 @@ void BenchmarkRunner::runPreprocessingPhase()
     // Header
     csv << "iteration"
         << ",total_preprocess_ms"
-        << ",relevant_preprocess_ms"
         << ",shader_load_ms"
         << ",scene_file_load_ms"
         << ",palette_overhead_ms"
@@ -109,7 +108,6 @@ void BenchmarkRunner::runPreprocessingPhase()
 
             csv << (iter - 1)                          // 0-based after warmup
                 << "," << preprocessMs
-                << "," << (t.meshingLoopMs + t.sceneBufferBuildMs)
                 << "," << t.shaderLoadMs
                 << "," << t.sceneFileLoadMs
                 << "," << t.paletteOverheadMs
